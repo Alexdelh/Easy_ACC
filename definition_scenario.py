@@ -4,90 +4,105 @@ import pandas as pd
 # --------- CONFIG ---------
 st.set_page_config(page_title="Easy ACC", layout="wide")
 
-# --------- SIDEBAR / LEFT PANEL ---------
-
+# --------- HEADER ---------
 st.title("Easy ACC ⚡")
 
-# ========= PARAMÈTRES =========
-st.sidebar.header("Paramètres")
+# ========== LAYOUT PRINCIPAL ==========
+# Colonne gauche : paramètres / producteurs / consommateurs
+# Colonne droite : carte puis clés de répartition
+left_col, right_col = st.columns([1.2, 3])   # Ajuste le ratio si nécessaire
 
-distance = st.sidebar.selectbox("Distance", ["5 km", "10 km", "20 km", "50 km"])
+# =====================================
+# -------- COLONNE GAUCHE -------------
+# =====================================
+with left_col:
 
-# ========= PRODUCTEURS =========
-st.sidebar.subheader("Producteurs")
+    # ========= PARAMÈTRES =========
+    st.header("Paramètres")
 
-producteurs = {
-    "Acteur I": ["Privée", False],
-    "Acteur II": ["Public", True],
-    "Acteur III": ["Para Public", False],
-    "Acteur IV": ["Privée", False],
-    "Acteur V": ["Privée", False],
-    "Acteur VI": ["Public", True],
-    "Acteur VII": ["Public", False],
-    "Acteur VIII": ["Para Public", False],
-}
+    distance = st.selectbox("Distance", ["5 km", "10 km", "20 km", "50 km"])
 
-prod_df = pd.DataFrame.from_dict(producteurs, orient="index",
-                                 columns=["Type", "ACI"])
-prod_df["Choix"] = False
+    # ========= PRODUCTEURS =========
+    st.subheader("Producteurs")
 
-prod_df["Choix"] = st.sidebar.checkbox("Sélectionner tous les producteurs ?", value=False)
+    producteurs = {
+        "Acteur I": ["Privée", False],
+        "Acteur II": ["Public", True],
+        "Acteur III": ["Para Public", False],
+        "Acteur IV": ["Privée", False],
+        "Acteur V": ["Privée", False],
+        "Acteur VI": ["Public", True],
+        "Acteur VII": ["Public", False],
+        "Acteur VIII": ["Para Public", False],
+    }
 
-# On affiche un tableau éditable
-prod_edit = st.sidebar.data_editor(prod_df)
+    prod_df = pd.DataFrame.from_dict(producteurs, orient="index",
+                                     columns=["Type", "ACI"])
+    prod_df["Choix"] = False
 
-# ========= CONSOMMATEURS =========
-st.sidebar.subheader("Consommateurs")
+    # Checkbox sélection globale
+    select_all = st.checkbox("Sélectionner tous les producteurs ?", value=False)
+    prod_df["Choix"] = select_all
 
-consos = pd.DataFrame({
-    "Acteur": ["Acteur I","Acteur II","Acteur III","Acteur IV","Acteur V","Acteur VI","Acteur VII","Acteur VIII"],
-    "Choix": [False, True, False, False, False, True, False, True],
-    "Type": ["Public","Para Public","Privée","Privée","Public","Public","Privée","Para Public"]
-})
+    # Tableau éditable
+    prod_edit = st.data_editor(prod_df)
 
-consos_edit = st.sidebar.data_editor(consos)
+    # ========= CONSOMMATEURS =========
+    st.subheader("Consommateurs")
 
-# ========= BOUTON =========
-if st.sidebar.button("Générer"):
-    st.success("Simulation générée 🎉")
+    consos = pd.DataFrame({
+        "Acteur": ["Acteur I","Acteur II","Acteur III","Acteur IV",
+                   "Acteur V","Acteur VI","Acteur VII","Acteur VIII"],
+        "Choix": [False, True, False, False, False, True, False, True],
+        "Type": ["Public","Para Public","Privée","Privée",
+                 "Public","Public","Privée","Para Public"]
+    })
+
+    consos_edit = st.data_editor(consos)
+
+    # ========= BOUTON =========
+    if st.button("Générer la simulation"):
+        st.success("Simulation générée 🎉")
 
 
-# --------- MAIN UI ---------
+# =====================================
+# -------- COLONNE DROITE -------------
+# =====================================
+with right_col:
 
-col1, col2 = st.columns([2,3])
-
-with col1:
+    # --------- CARTE / VISU ----------
     st.subheader("Carte / Visualisation")
-    st.info("👉 Ici tu mettras ta carte, ton dashboard ou ton plot\n(example: plotly mapbox, folium…)")
+    st.info("👉 Ici tu mettras ta carte, ton dashboard ou ton plot "
+            "(plotly mapbox, folium…)")
 
-with col2:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/c/c3/Bretagne_administrative_map.svg",
-             caption="Exemple de carte (placeholder)",
-             use_column_width=True)
+    st.image(
+        "https://upload.wikimedia.org/wikipedia/commons/c/c3/Bretagne_administrative_map.svg",
+        caption="Exemple de carte (placeholder)",
+        use_column_width=True
+    )
 
-# --------- RÉPARTITION ---------
-st.subheader("Clé de répartition 🔑")
+    # --------- CLÉ DE RÉPARTITION -----------
+    st.subheader("Clé de répartition 🔑")
 
-tabs = st.tabs(["Statique", "Dynamique par défaut", "Dynamique simple"])
+    tabs = st.tabs(["Statique", "Dynamique par défaut", "Dynamique simple"])
 
-# Valeurs par défaut
-actors = [f"Acteur {i}" for i in range(1, 9)]
-values = [22,8,30,5,10,4,1,0]
+    actors = [f"Acteur {i}" for i in range(1, 9)]
+    values = [22,8,30,5,10,4,1,0]
+    df_split = pd.DataFrame({"Acteur": actors, "Répartition (%)": values})
 
-df_split = pd.DataFrame({"Acteur": actors, "Répartition (%)": values})
+    with tabs[0]:
+        st.write("🔹 Mode statique")
 
-with tabs[0]:
-    st.write("🔹 Mode statique")
-    edit = st.data_editor(df_split)
-    restant = 100 - edit["Répartition (%)"].sum()
+        edit = st.data_editor(df_split)
+        restant = 100 - edit["Répartition (%)"].sum()
+        st.metric("Restant (%)", restant)
 
-    st.metric("Restant (%)", restant)
+    with tabs[1]:
+        st.info("Mode dynamique par défaut — à implémenter selon ton algorithme ⚙")
 
-with tabs[1]:
-    st.info("Mode dynamique par défaut — à implémenter selon ton algorithme ⚙")
+    with tabs[2]:
+        st.warning("Mode dynamique simple — ex: pondération par consommation ou distance")
 
-with tabs[2]:
-    st.warning("Mode dynamique simple — ex: pondération par consommation ou distance")
 
-# Footer
+# --------- FOOTER ----------
 st.caption("Prototype UI — Easy ACC ©")
