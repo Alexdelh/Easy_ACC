@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
+from streamlit_folium import st_folium
+from functions import show_map_with_radius
 
-# --------- CONFIG ---------
 st.set_page_config(page_title="Easy ACC", layout="wide")
 
 # --------- HEADER ---------
@@ -20,7 +21,8 @@ with left_col:
     # ========= PARAMÈTRES =========
     st.header("Paramètres")
 
-    distance = st.selectbox("Distance", ["5 km", "10 km", "20 km", "50 km"])
+    distance = st.selectbox("Distance", ["5 km", "10 km", "20 km"])
+    
 
     # ========= PRODUCTEURS =========
     st.subheader("Producteurs")
@@ -70,17 +72,33 @@ with left_col:
 # =====================================
 with right_col:
 
-    # --------- CARTE / VISU ----------
-    st.subheader("Carte / Visualisation")
-    st.info("👉 Ici tu mettras ta carte, ton dashboard ou ton plot "
-            "(plotly mapbox, folium…)")
+    st.title("Carte Folium — Centroïde + Rayon 📍")
 
-    st.image(
-        "https://upload.wikimedia.org/wikipedia/commons/c/c3/Bretagne_administrative_map.svg",
-        caption="Exemple de carte (placeholder)",
-        use_column_width=True
-    )
+    # Exemple de points
+    points = [
+        {"name": "Producteur A", "lat": 48.8566, "lon": 2.3522},
+        {"name": "Consommateur B", "lat": 48.8666, "lon": 2.3222},
+        {"name": "Consommateur C", "lat": 48.8466, "lon": 2.3622}
+        
+    ]
 
+    radius_km = int(distance.split()[0])
+
+    # Génération de la carte
+    m, centroid, inside, outside = show_map_with_radius(points, radius_km=radius_km)
+
+    st.subheader("🗺️ Carte")
+    st_folium(m, width=700, height=500)
+
+
+    st.subheader("✔️ Points dans le rayon")
+    st.write(inside)
+
+    st.subheader("❌ Points hors rayon")
+    st.write(outside)
+    
+    if outside:
+        st.error("⚠️ Attention : Des points se trouvent en dehors du rayon défini !")
     # --------- CLÉ DE RÉPARTITION -----------
     st.subheader("Clé de répartition 🔑")
 
