@@ -1,10 +1,24 @@
-ACC_data\consumers.xlsx
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
 
-ACC_data\grid.xlsx
+# uv virtual environment
+.venv/
 
-ACC_data\producers.xlsx
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
 
-ACC_data\tariffs.xlsx
+# Output files
+outputs/
 
-ACCKB
-env
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data
+data/
