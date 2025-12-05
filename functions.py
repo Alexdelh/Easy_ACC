@@ -1,47 +1,199 @@
 from geopy.distance import geodesic
 import folium
+import pandas as pd
+import logging
 
-def show_map_with_radius(points, radius_km=20, zoom=12):
-        if not points:
-            raise ValueError("La liste de points est vide")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-        # 1. Centroïde
-        center_lat = sum(p["lat"] for p in points) / len(points)
-        center_lon = sum(p["lon"] for p in points) / len(points)
+STATUT_CHOICES = ['Public', 'Privé', 'Para-public']
+STATUT_COLORS = {
+    'Public': 'blue',
+    'Privé': 'orange',
+    'Para-public': 'green',
+}
 
-        # 2. Carte Folium
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom)
 
-        # 5. Vérification des distances (fait avant pour avoir les listes)
+def import_consumers(path: str) -> pd.DataFrame:
+    """Importe et normalise le fichier des consommateurs (CSV ou Excel)."""
+    try:
+        if path.endswith('.xlsx'):
+            df = pd.read_excel(path)
+        else:
+            df = pd.read_csv(path)
+        
+        # Ajouter colonne Statut si absente
+        if 'Statut' not in df.columns:
+            df['Statut'] = None
+        
+        # Convertir Lat/Long en float
+        df['Lat'] = pd.to_numeric(df['Lat'], errors='coerce')
+        df['Long'] = pd.to_numeric(df['Long'], errors='coerce')
+        
+        logger.info(f"Consommateurs importés: {len(df)} lignes")
+        return df
+    except Exception as e:
+        logger.error(f"Erreur import consommateurs: {e}")
+        raise
+
+
+def import_producers(path: str) -> pd.DataFrame:
+    """Importe et normalise le fichier des producteurs (CSV ou Excel)."""
+    try:
+        if path.endswith('.xlsx'):
+            df = pd.read_excel(path)
+        else:
+            df = pd.read_csv(path)
+        
+        # Ajouter colonne Statut si absente
+        if 'Statut' not in df.columns:
+            df['Statut'] = None
+        
+        # Convertir Lat/Long en float
+        df['Lat'] = pd.to_numeric(df['Lat'], errors='coerce')
+        df['Long'] = pd.to_numeric(df['Long'], errors='coerce')
+        
+        logger.info(f"Producteurs importés: {len(df)} lignes")
+        return df
+    except Exception as e:
+        logger.error(f"Erreur import producteurs: {e}")
+        raise
+
+
+def get_marker_color(statut: str) -> str:
+    """Retourne la couleur folium selon le Statut."""
+    return STATUT_COLORS.get(statut, 'gray')
+
+
+def create_map_from_points(points_data: list, zoom: int = 12) -> folium.Map:
+    """
+    Crée une carte folium à partir d'une liste de points.
+    
+    Args:
+        points_data: list of dicts {'lat', 'lon', 'nom', 'statut', 'type', 'commune', 'priorite'}
+        zoom: niveau de zoom
+    
+    Returns:
+        folium.Map
+    """
+    if not points_data:
+        # Centre par défaut (Paris)
+        center_lat, center_lon = 48.8566, 2.3522
+    else:
+        center_lat = sum(p['lat'] for p in points_data) / len(points_data)
+        center_lon = sum(p['lon'] for p in points_data) / len(points_data)
+    
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom)
+    
+    for p in points_data:
+        color = get_marker_color(p.get('statut'))
+        popup_html = f"""
+        <b>{p['nom']}</b><br>
+        Type: {p['type']}<br>
+        Statut: {p.get('statut', 'N/A')}<br>
+        Commune: {p.get('commune', 'N/A')}<br>
+        Priorité: {p.get('priorite', 'N/A')}
+        """
+        folium.Marker(
+            location=[p['lat'], p['lon']],
+            popup=folium.Popup(popup_html, max_width=250),
+            icon=folium.Icon(color=color, icon='info-sign'),
+        ).add_to(m)
+    
+    return m
+
+
+def show_map_with_radius(points: list, radius_km: float = 10, zoom: int = 12):
+    """
+    Crée une carte avec cercle de rayon et centroïde optimisé.
+    
+    Cherche le centroïde qui maximise le nombre de points à l'intérieur du rayon.
+    Si plusieurs centroïdes donnent le même nombre de points inside,
+    choisit celui minimisant la somme totale des distances.
+    
+    Args:
+        points: list of dicts {'name', 'lat', 'lon'}
+        radius_km: rayon du cercle en km
+        zoom: niveau de zoom folium
+    
+    Retourne : (folium.Map, (center_lat, center_lon), inside_list, outside_list)
+        - inside_list / outside_list: list of tuples (name, distance_km)
+    """
+    if not points:
+        raise ValueError("La liste de points est vide")
+
+    # Centroïde initial (moyenne simple)
+    orig_lat = sum(p["lat"] for p in points) / len(points)
+    orig_lon = sum(p["lon"] for p in points) / len(points)
+
+    def compute_lists(center_lat, center_lon):
         inside = []
         outside = []
-
         for p in points:
             d = geodesic((center_lat, center_lon), (p["lat"], p["lon"])).km
             if d <= radius_km:
                 inside.append((p["name"], round(d, 2)))
             else:
                 outside.append((p["name"], round(d, 2)))
+        return inside, outside
 
-        # 3. Points avec couleurs (vert=inside, rouge=outside)
-        for p in points:
-            # Déterminer la couleur basée sur si le point est inside ou outside
-            is_inside = any(name == p["name"] for name, _ in inside)
-            color = "green" if is_inside else "red"
-            
-            folium.Marker(
-                location=[p["lat"], p["lon"]],
-                popup=p["name"],
-                icon=folium.Icon(color=color)
-            ).add_to(m)
+    # Calcul initial
+    inside, outside = compute_lists(orig_lat, orig_lon)
 
-        # 4. Cercle autour du centroïde (gris)
-        folium.Circle(
-            location=[center_lat, center_lon],
-            radius=radius_km * 1000,  # meters
-            color="gray",
-            fill=True,
-            fill_opacity=0.15
+    # Si des points sont en dehors, rechercher un centre candidat
+    center_lat, center_lon = orig_lat, orig_lon
+    if outside:
+        candidates = [(p["lat"], p["lon"]) for p in points]
+        candidates.append((orig_lat, orig_lon))
+
+        def total_distance(center_lat, center_lon):
+            return sum(
+                geodesic((center_lat, center_lon), (p["lat"], p["lon"])).km
+                for p in points
+            )
+
+        best_center = (orig_lat, orig_lon)
+        best_inside, best_outside = inside, outside
+        best_count = len(inside)
+        best_total_dist = total_distance(orig_lat, orig_lon)
+
+        for cand_lat, cand_lon in candidates:
+            in_c, out_c = compute_lists(cand_lat, cand_lon)
+            count = len(in_c)
+            if count > best_count:
+                best_count = count
+                best_center = (cand_lat, cand_lon)
+                best_inside, best_outside = in_c, out_c
+                best_total_dist = total_distance(cand_lat, cand_lon)
+            elif count == best_count:
+                td = total_distance(cand_lat, cand_lon)
+                if td < best_total_dist:
+                    best_center = (cand_lat, cand_lon)
+                    best_inside, best_outside = in_c, out_c
+                    best_total_dist = td
+
+        center_lat, center_lon = best_center
+        inside, outside = best_inside, best_outside
+
+    # Construire la carte centrée sur le centre choisi
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom)
+
+    names_inside = {name for name, _ in inside}
+    for p in points:
+        color = "green" if p["name"] in names_inside else "red"
+        folium.Marker(
+            location=[p["lat"], p["lon"]],
+            popup=p["name"],
+            icon=folium.Icon(color=color)
         ).add_to(m)
 
-        return m, (center_lat, center_lon), inside, outside
+    # Cercle gris
+    folium.Circle(
+        location=[center_lat, center_lon],
+        radius=radius_km * 1000,
+        color="gray",
+        fill=True,
+        fill_opacity=0.15,
+    ).add_to(m)
+
+    return m, (center_lat, center_lon), inside, outside
