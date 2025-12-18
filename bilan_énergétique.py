@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import seaborn as sns
+import datetime
 
 st.set_page_config(layout="wide", page_title="Easy ACC – Taux de couverture")
 
@@ -82,8 +83,32 @@ with col_right:
     </style>
     """, unsafe_allow_html=True)
 
+    # Export PDF
     st.button("📄 Exporter PDF")
-    st.write("Période : 31 jan 2024 – 31 jan 2025")
+    
+    # Affichage période
+
+    min_date = datetime.date(2024, 1, 1)
+    max_date = datetime.date(2024, 12, 31)
+
+    start_date = st.date_input("Date de début", value=datetime.date(2024,1,1), min_value=min_date, max_value=max_date)
+    end_date = st.date_input("Date de fin", value=datetime.date(2024,12,31), min_value=min_date, max_value=max_date)
+
+    # Correction automatique
+    if start_date < min_date or start_date > max_date:
+        st.error("Date de début hors limites, réinitialisation automatique.")
+        start_date = min_date
+
+    if end_date < min_date or end_date > max_date:
+        st.error("Date de fin hors limites, réinitialisation automatique.")
+        end_date = max_date
+
+    if start_date > end_date:
+        st.error("La période de début doit être avant la période de fin.")
+        start_date = min_date
+        end_date = max_date
+
+    st.write(f"Période : {start_date.strftime('%b %Y')} – {end_date.strftime('%b %Y')}")
 
 with col_title:
     st.markdown("<div class='big-title'>Taux de couverture</div>", unsafe_allow_html=True)
@@ -199,57 +224,85 @@ with col_content:
 # 4 DONUTS : Production, Surplus, Conso ACC, Production ACC
 # ------------------------------------------------------------
 
+# Palette colorblind
 def colorblind_palette(n):
-    """
-    Retourne une liste de n couleurs issues de la palette colorblind de seaborn,
-    répétées si nécessaire.
-    """
-    base_colors = sns.color_palette("colorblind")  # 8 couleurs sûres pour daltoniens
-    colors = [f'rgba({int(r*255)},{int(g*255)},{int(b*255)},1)' 
-              for r,g,b in base_colors]
-    
-    # Répéter les couleurs si n > 8
-    result = [colors[i % len(colors)] for i in range(n)]
-    return result
+    base_colors = sns.color_palette("colorblind")
+    colors = [
+        f'rgba({int(r*255)},{int(g*255)},{int(b*255)},1)'
+        for r, g, b in base_colors
+    ]
+    return [colors[i % len(colors)] for i in range(n)]
 
-# Fonction donut avec total au centre, légende séparée
-def donut_total_kwh(values, labels):
+# Couleur par défaut
+ACC_BAR_COLOR = colorblind_palette(4)[0]
+
+# Donut avec total au centre
+def donut_total_kwh(values):
     total = sum(values)
     colors = colorblind_palette(len(values))
-    
-    fig = go.Figure(data=[go.Pie(
+
+    fig = go.Figure(go.Pie(
         values=values,
-        labels=[""]*len(values),   # pas de texte sur le donut
+        labels=[""] * len(values),
         hole=0.7,
         marker=dict(colors=colors),
-        textinfo='none',           # pas de texte sur le donut
-        hoverinfo='label+value'
-    )])
-    
-    # Total au centre
+        textinfo='none',
+        hoverinfo='value'
+    ))
+
     fig.update_layout(
         annotations=[dict(
             text=f"{total} kWh",
             font_size=22,
             showarrow=False,
-            x=0.5, y=0.5,
-            xanchor='center',
-            yanchor='middle'
+            x=0.5, y=0.5
         )],
         margin=dict(t=20, b=20, l=20, r=20),
-        width=350,
-        height=350,
-        showlegend=False  # légende affichée séparément
+        width=320,
+        height=320,
+        showlegend=False
     )
-    
+
     return fig, colors
 
-# Fonction pour afficher la légende séparément
+
+
+# Légende séparée
 def display_legend(labels, values, colors):
     for l, v, c in zip(labels, values, colors):
-        st.markdown(f"<span style='color:{c}; font-weight:bold;'>●</span> {l}: {v} kWh", unsafe_allow_html=True)
+        st.markdown(
+            f"<span style='color:{c}; font-weight:bold;'>●</span> {l}: {v} kWh",
+            unsafe_allow_html=True
+        )
 
-# Données exemples
+
+
+# Barre de taux Plotly
+def taux_bar_plotly(taux, color):
+    fig = go.Figure(go.Bar(
+        x=[taux],
+        y=[""],
+        orientation="h",
+        width=0.25,  # épaisseur de la barre
+        text=[f"{taux:.1f} %"],
+        textposition="outside",  # texte à l'extérieur de la barre
+        textfont=dict(size=50),  # texte plus gros
+        marker=dict(color=color)
+    ))
+
+    fig.update_layout(
+        xaxis=dict(range=[0, 100], visible=False),
+        yaxis=dict(visible=False),
+        height=70,  # hauteur totale du graphe
+        margin=dict(l=10, r=50, t=0, b=0),
+        showlegend=False
+    )
+
+    return fig
+
+
+
+# DONNÉES
 prod_labels = ["Producteur 1", "Producteur 2", "Producteur 3"]
 prod_values = [20, 35, 15]
 
@@ -262,70 +315,96 @@ conso_values = [25, 13]
 acc_labels = ["Surplus de production", "Autoconsommation totale"]
 acc_values = [35, 23]
 
-# Ajouter de l'espace avant les donuts
+
+
+# CALCUL DES TAUX
+taux_autoproduction = conso_values[1] / sum(conso_values) * 100
+taux_autoconsommation = acc_values[1] / sum(acc_values) * 100
+
+
+
+# AFFICHAGE
 st.markdown("<br><br>", unsafe_allow_html=True)
 
-# Créer 4 colonnes pour les donuts
 col1, col2, col3, col4 = st.columns(4)
 
+# ----- Production
 with col1:
     st.markdown("<h3 style='text-align:center;'>Production</h3>", unsafe_allow_html=True)
-    fig, colors = donut_total_kwh(prod_values, prod_labels)
+    fig, colors = donut_total_kwh(prod_values)
     st.plotly_chart(fig, use_container_width=False)
     display_legend(prod_labels, prod_values, colors)
 
+# ----- Surplus de production
 with col2:
     st.markdown("<h3 style='text-align:center;'>Surplus de production</h3>", unsafe_allow_html=True)
-    fig, colors = donut_total_kwh(surplus_values, surplus_labels)
+    fig, colors = donut_total_kwh(surplus_values)
     st.plotly_chart(fig, use_container_width=False)
     display_legend(surplus_labels, surplus_values, colors)
 
+# ----- Consommation ACC
 with col3:
     st.markdown("<h3 style='text-align:center;'>Consommation ACC</h3>", unsafe_allow_html=True)
-    fig, colors = donut_total_kwh(conso_values, conso_labels)
+    fig, colors = donut_total_kwh(conso_values)
     st.plotly_chart(fig, use_container_width=False)
     display_legend(conso_labels, conso_values, colors)
 
+    st.markdown(
+        "<div style='margin-bottom:2px; font-weight:600;'>Taux d’autoproduction</div>",
+        unsafe_allow_html=True
+    )
+    st.plotly_chart(
+        taux_bar_plotly(taux_autoproduction, ACC_BAR_COLOR),
+        use_container_width=True
+    )
+
+# ----- Production ACC
 with col4:
     st.markdown("<h3 style='text-align:center;'>Production ACC</h3>", unsafe_allow_html=True)
-    fig, colors = donut_total_kwh(acc_values, acc_labels)
+    fig, colors = donut_total_kwh(acc_values)
     st.plotly_chart(fig, use_container_width=False)
     display_legend(acc_labels, acc_values, colors)
+
+    st.markdown(
+        "<div style='margin-bottom:2px; font-weight:600;'>Taux d’autoconsommation</div>",
+        unsafe_allow_html=True
+    )
+    st.plotly_chart(
+        taux_bar_plotly(taux_autoconsommation, ACC_BAR_COLOR),
+        use_container_width=True
+    )
+
 
 # ------------------------------------------------------------
 # INDICATEURS ÉNERGÉTIQUES + ÉCONOMIQUES
 # ------------------------------------------------------------
 st.markdown("---")
 
-# Colonnes : vide | contenu (2 colonnes) | vide
-col_left_space, col_content, col_right_space = st.columns([1, 3, 1])
+# Colonnes : vide plus large | bloc énergétique | bloc économique | vide plus large
+col_left_space, col_energy, col_econ, col_right_space = st.columns([2.3, 3, 3, 1.7])
 
-with col_content:
-    # Créer deux colonnes pour tes indicateurs à l'intérieur
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
-        st.markdown("### Indicateurs Énergétiques", unsafe_allow_html=True)
-        st.markdown("""
-        - Taux de couverture : Value 1  
-        - Taux de surplus collectif : Value 2  
-        - Taux d’autoproduction collective : Value 3  
-        - Taux d’autoconsommation collective : Value 4  
-        - Volume total produit : Value 5  
-        - Volume total autoconsommé : Value 6  
-        """, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+with col_energy:
+    st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+    st.markdown("### Indicateurs Énergétiques", unsafe_allow_html=True)
+    st.markdown("""
+    - Taux de couverture : Value 1  
+    - Taux de surplus collectif : Value 2  
+    - Taux d’autoproduction collective : Value 3  
+    - Taux d’autoconsommation collective : Value 4  
+    - Volume total produit : Value 5  
+    - Volume total autoconsommé : Value 6  
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with col2:
-        st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
-        st.markdown("### Indicateurs Économiques", unsafe_allow_html=True)
-        st.markdown("""
-        - Économies de fournitures : Value 1  
-        - Économies de TURPE : Value 2  
-        - Économies de taxes : Value 3  
-        """, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+with col_econ:
+    st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+    st.markdown("### Indicateurs Économiques", unsafe_allow_html=True)
+    st.markdown("""
+    - Économies de fournitures : Value 1  
+    - Économies de TURPE : Value 2  
+    - Économies de taxes : Value 3  
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # GRAPHIQUES TEMPORELS
