@@ -9,7 +9,7 @@ init_session_state()
 if "current_phase" not in st.session_state:
     st.session_state["current_phase"] = "precalibrage"
 if "precalibrage_page" not in st.session_state:
-    st.session_state["precalibrage_page"] = 1
+    st.session_state["precalibrage_page"] = 0
 if "bilan_page" not in st.session_state:
     st.session_state["bilan_page"] = 1
 
@@ -22,7 +22,10 @@ if current_phase == "precalibrage":
     # Route to the correct precalibrage page
     page_num = st.session_state["precalibrage_page"]
     
-    if page_num == 1:
+    if page_num == 0:
+        from pages.precalibrage import projects_list
+        projects_list.render()
+    elif page_num == 1:
         from pages.precalibrage import general
         general.render()
     elif page_num == 2:
