@@ -78,14 +78,15 @@ def render():
             <table class="soutirage-table">
                 <thead>
                     <tr>
-                        <th style="width: 16%;">Nom</th>
-                        <th style="width: 10%;">Segment</th>
-                        <th style="width: 13%;">Tarif réf. (c€/kWh)</th>
-                        <th style="width: 14%;">ACI</th>
-                        <th style="width: 9%;">TVA</th>
-                        <th style="width: 13%;">Structure tarifaire</th>
-                        <th style="width: 11%;">Tarif complément</th>
-                        <th style="width: 14%;">Actions</th>
+                        <th style="width: 15%;">Nom</th>
+                        <th style="width: 9%;">Segment</th>
+                        <th style="width: 11%;">Activité</th>
+                        <th style="width: 12%;">Tarif réf. (c€/kWh)</th>
+                        <th style="width: 13%;">ACI</th>
+                        <th style="width: 8%;">TVA</th>
+                        <th style="width: 12%;">Structure tarifaire</th>
+                        <th style="width: 10%;">Tarif complément</th>
+                        <th style="width: 10%;">Actions</th>
                     </tr>
                 </thead>
             </table>
@@ -95,25 +96,28 @@ def render():
             # Display each point with action buttons
             for idx, point in enumerate(points):
                 # Create columns for data display and action buttons
-                cols = st.columns([0.16, 0.10, 0.13, 0.14, 0.09, 0.13, 0.11, 0.14])
+                cols = st.columns([0.15, 0.09, 0.11, 0.12, 0.13, 0.08, 0.12, 0.10, 0.10])
                 
                 with cols[0]:
                     st.markdown(f"<div style='padding: 4px 0;'>{point['nom']}</div>", unsafe_allow_html=True)
                 with cols[1]:
                     st.markdown(f"<div style='padding: 4px 0;'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[2]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['tarif_reference']}</div>", unsafe_allow_html=True)
+                    activite_display = point.get('activite', 'N/A')
+                    st.markdown(f"<div style='padding: 4px 0;'>{activite_display}</div>", unsafe_allow_html=True)
                 with cols[3]:
+                    st.markdown(f"<div style='padding: 4px 0;'>{point['tarif_reference']}</div>", unsafe_allow_html=True)
+                with cols[4]:
                     aci_text = f"Oui ({point['aci_partenaire']})" if point['aci'] else "Non"
                     st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
-                with cols[4]:
+                with cols[5]:
                     tva_status = "✅" if point.get('tva', False) else "❌"
                     st.markdown(f"<div style='padding: 4px 0;'>{tva_status}</div>", unsafe_allow_html=True)
-                with cols[5]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['structure_tarifaire']}</div>", unsafe_allow_html=True)
                 with cols[6]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['tarif_complement']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0;'>{point['structure_tarifaire']}</div>", unsafe_allow_html=True)
                 with cols[7]:
+                    st.markdown(f"<div style='padding: 4px 0;'>{point['tarif_complement']}</div>", unsafe_allow_html=True)
+                with cols[8]:
                     # Action buttons with emojis
                     action_cols = st.columns([1, 1, 1], gap="small")
                     
@@ -165,7 +169,7 @@ def render():
                 "apply_tva": False, "structure_tarifaire": "Base",
                 "aci": False, "aci_partenaire": "Aucun",
                 "tarif_complement": 0.0, "adresse": "",
-                "curve_data": None, "coords": None
+                "curve_data": None, "coords": None, "activite": "Publique"
             }
         
         state = st.session_state["sout_form_state"]
@@ -177,6 +181,22 @@ def render():
             state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
             state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
             state["adresse"] = st.text_input("Adresse *", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
+            
+            # Activity type with EPCI constraint
+            distance_constraint = st.session_state.get("distance_constraint", "2 km")
+            is_epci = distance_constraint.strip().upper() == "EPCI"
+            activite_options = ["Publique", "Semi-publique", "Privée"]
+            if is_epci:
+                activite_options = ["Publique", "Semi-publique"]
+                # If current value is Privée in EPCI mode, reset to Publique
+                if state.get("activite") == "Privée":
+                    state["activite"] = "Publique"
+            state["activite"] = st.selectbox(
+                "Type d'activité", 
+                activite_options, 
+                index=activite_options.index(state.get("activite", "Publique")) if state.get("activite", "Publique") in activite_options else 0,
+                help="En mode EPCI, seules les activités publiques et semi-publiques sont autorisées."
+            )
         
         with col2:
             state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_reference"], format="%.2f")
@@ -279,6 +299,7 @@ def render():
                         new_point = {
                             "nom": state["nom"],
                             "segment": state["segment"],
+                            "activite": state["activite"],
                             "tarif_reference": state["tarif_reference"],
                             "aci": state["aci"],
                             "aci_partenaire": state["aci_partenaire"] if state["aci"] else "Aucun",
@@ -299,7 +320,7 @@ def render():
                             "apply_tva": False, "structure_tarifaire": "Base",
                             "aci": False, "aci_partenaire": "Aucun",
                             "tarif_complement": 0.0, "adresse": "",
-                            "curve_data": None, "coords": None
+                            "curve_data": None, "coords": None, "activite": "Publique"
                         }
                         st.rerun()
         
@@ -310,7 +331,7 @@ def render():
                     "apply_tva": False, "structure_tarifaire": "Base",
                     "aci": False, "aci_partenaire": "Aucun",
                     "tarif_complement": 0.0, "adresse": "",
-                    "curve_data": None, "coords": None
+                    "curve_data": None, "coords": None, "activite": "Publique"
                 }
                 st.rerun()
 
