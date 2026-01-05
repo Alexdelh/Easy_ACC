@@ -143,13 +143,12 @@ def render():
             <table class="injection-table">
                 <thead>
                     <tr>
-                        <th style="width: 16%;">Nom</th>
-                        <th style="width: 11%;">Type</th>
-                        <th style="width: 9%;">Segment</th>
-                        <th style="width: 12%;">Activité</th>
-                        <th style="width: 12%;">Puissance (kW)</th>
-                        <th style="width: 9%;">TVA</th>
-                        <th style="width: 16%;">Valorisation (cEUR/kWh)</th>
+                        <th style="width: 18%;">Nom</th>
+                        <th style="width: 13%;">Type</th>
+                        <th style="width: 11%;">Segment</th>
+                        <th style="width: 14%;">Puissance (kW)</th>
+                        <th style="width: 11%;">TVA</th>
+                        <th style="width: 18%;">Valorisation (cEUR/kWh)</th>
                         <th style="width: 15%;">Actions</th>
                     </tr>
                 </thead>
@@ -160,7 +159,7 @@ def render():
             # Display each point with action buttons
             for idx, point in enumerate(points):
                 # Create columns for data display and action buttons
-                cols = st.columns([0.16, 0.11, 0.09, 0.12, 0.12, 0.09, 0.16, 0.15])
+                cols = st.columns([0.18, 0.13, 0.11, 0.14, 0.11, 0.18, 0.15])
                 
                 with cols[0]:
                     st.markdown(f"<div style='padding: 4px 0;'>{point['nom']}</div>", unsafe_allow_html=True)
@@ -169,16 +168,13 @@ def render():
                 with cols[2]:
                     st.markdown(f"<div style='padding: 4px 0;'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[3]:
-                    activite_display = point.get('activite', 'N/A')
-                    st.markdown(f"<div style='padding: 4px 0;'>{activite_display}</div>", unsafe_allow_html=True)
-                with cols[4]:
                     st.markdown(f"<div style='padding: 4px 0;'>{int(point['puissance'])}</div>", unsafe_allow_html=True)
-                with cols[5]:
+                with cols[4]:
                     tva_status = "✅" if point.get('tva', False) else "❌"
                     st.markdown(f"<div style='padding: 4px 0;'>{tva_status}</div>", unsafe_allow_html=True)
-                with cols[6]:
+                with cols[5]:
                     st.markdown(f"<div style='padding: 4px 0;'>{point['valorisation']}</div>", unsafe_allow_html=True)
-                with cols[7]:
+                with cols[6]:
                     # Action buttons with emojis
                     action_cols = st.columns([1, 1, 1], gap="small")
                     
@@ -229,8 +225,7 @@ def render():
                 "nom": "", "type": "Solaire", "segment": "C4", 
                 "puissance": 0, "apply_tva": False, "valorisation": 0.0,
                 "adresse": "", "source": "Aucune",
-                "curve_data": None, "coords": None, "last_pvgis_params": "",
-                "activite": "Publique"
+                "curve_data": None, "coords": None, "last_pvgis_params": ""
             }
         
         state = st.session_state["inj_form_state"]
@@ -243,22 +238,6 @@ def render():
             state["type"] = st.selectbox("Type", ["Solaire", "Éolien"], index=["Solaire", "Éolien"].index(state["type"]) if state["type"] in ["Solaire", "Éolien"] else 0)
             segment_options = ["C2", "C3", "C4", "C5"]
             state["segment"] = st.selectbox("Segment", segment_options, index=segment_options.index(state["segment"]) if state["segment"] in segment_options else 2)
-            
-            # Activity type with EPCI constraint
-            distance_constraint = st.session_state.get("distance_constraint", "2 km")
-            is_epci = distance_constraint.strip().upper() == "EPCI"
-            activite_options = ["Publique", "Semi-publique", "Privée"]
-            if is_epci:
-                activite_options = ["Publique", "Semi-publique"]
-                # If current value is Privée in EPCI mode, reset to Publique
-                if state.get("activite") == "Privée":
-                    state["activite"] = "Publique"
-            state["activite"] = st.selectbox(
-                "Type d'activité", 
-                activite_options, 
-                index=activite_options.index(state.get("activite", "Publique")) if state.get("activite", "Publique") in activite_options else 0,
-                help="En mode EPCI, seules les activités publiques et semi-publiques sont autorisées."
-            )
         
         with col2:
             state["puissance"] = st.number_input("Puissance (kW)", min_value=0, step=1, value=state["puissance"], format="%d")
@@ -416,7 +395,6 @@ def render():
                             "nom": state["nom"],
                             "type": state["type"],
                             "segment": state["segment"],
-                            "activite": state["activite"],
                             "puissance": state["puissance"],
                             "tva": state["apply_tva"],
                             "valorisation": state["valorisation"],
@@ -434,7 +412,7 @@ def render():
                             "nom": "", "type": "Solaire", "segment": "C4",
                             "puissance": 0, "apply_tva": False, "valorisation": 0.0,
                             "adresse": "", "source": "Aucune",
-                            "curve_data": None, "coords": None, "activite": "Publique"
+                            "curve_data": None, "coords": None
                         }
                         st.rerun()
         
@@ -444,7 +422,7 @@ def render():
                     "nom": "", "type": "Solaire", "segment": "C4",
                     "puissance": 0, "apply_tva": False, "valorisation": 0.0,
                     "adresse": "", "source": "Aucune",
-                    "curve_data": None, "coords": None, "activite": "Publique"
+                    "curve_data": None, "coords": None
                 }
                 st.rerun()
 

@@ -89,7 +89,7 @@ def create_map_from_points(points_data: list, zoom: int = 12) -> folium.Map:
         color = get_marker_color(p.get('statut'))
         popup_html = f"""
         <b>{p['nom']}</b><br>
-        Type: {p['type']}<br>
+        Type: {p.get('type', 'N/A')}<br>
         Statut: {p.get('statut', 'N/A')}<br>
         Commune: {p.get('commune', 'N/A')}<br>
         Priorité: {p.get('priorite', 'N/A')}
@@ -97,6 +97,7 @@ def create_map_from_points(points_data: list, zoom: int = 12) -> folium.Map:
         folium.Marker(
             location=[p['lat'], p['lon']],
             popup=folium.Popup(popup_html, max_width=250),
+            tooltip=p.get('nom', ''),
             icon=folium.Icon(color=color, icon='info-sign'),
         ).add_to(m)
     
@@ -123,18 +124,26 @@ def show_map_with_radius(points: list, radius_km: float = 10, zoom: int = 12):
         raise ValueError("La liste de points est vide")
 
     # Centroïde initial (moyenne simple)
-    orig_lat = sum(p["lat"] for p in points) / len(points)
-    orig_lon = sum(p["lon"] for p in points) / len(points)
+    def _lon(p):
+        return p.get("lon", p.get("lng"))
+
+    # Filter out points missing coordinates
+    valid_points = [p for p in points if p.get("lat") is not None and _lon(p) is not None]
+    if not valid_points:
+        raise ValueError("La liste de points est vide ou invalide")
+
+    orig_lat = sum(p["lat"] for p in valid_points) / len(valid_points)
+    orig_lon = sum(_lon(p) for p in valid_points) / len(valid_points)
 
     def compute_lists(center_lat, center_lon):
         inside = []
         outside = []
-        for p in points:
-            d = geodesic((center_lat, center_lon), (p["lat"], p["lon"])).km
+        for p in valid_points:
+            d = geodesic((center_lat, center_lon), (p["lat"], _lon(p))).km
             if d <= radius_km:
-                inside.append((p["name"], round(d, 2)))
+                inside.append((p.get("name", p.get("nom", "")), round(d, 2)))
             else:
-                outside.append((p["name"], round(d, 2)))
+                outside.append((p.get("name", p.get("nom", "")), round(d, 2)))
         return inside, outside
 
     # Calcul initial
@@ -143,13 +152,13 @@ def show_map_with_radius(points: list, radius_km: float = 10, zoom: int = 12):
     # Si des points sont en dehors, rechercher un centre candidat
     center_lat, center_lon = orig_lat, orig_lon
     if outside:
-        candidates = [(p["lat"], p["lon"]) for p in points]
+        candidates = [(p["lat"], _lon(p)) for p in valid_points]
         candidates.append((orig_lat, orig_lon))
 
         def total_distance(center_lat, center_lon):
             return sum(
-                geodesic((center_lat, center_lon), (p["lat"], p["lon"])).km
-                for p in points
+                geodesic((center_lat, center_lon), (p["lat"], _lon(p))).km
+                for p in valid_points
             )
 
         best_center = (orig_lat, orig_lon)
@@ -179,11 +188,20 @@ def show_map_with_radius(points: list, radius_km: float = 10, zoom: int = 12):
     m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom)
 
     names_inside = {name for name, _ in inside}
-    for p in points:
-        color = "green" if p["name"] in names_inside else "red"
+    for p in valid_points:
+        actor_name = p.get("name", p.get("nom", ""))
+        color = "green" if actor_name in names_inside else "red"
+        # Build richer popup if optional fields are present
+        popup_html = f"""
+        <b>{actor_name}</b><br>
+        Type: {p.get('type', 'N/A')}<br>
+        Segment: {p.get('segment', 'N/A')}<br>
+        Puissance: {p.get('puissance', 'N/A')}<br>
+        """
         folium.Marker(
-            location=[p["lat"], p["lon"]],
-            popup=p["name"],
+            location=[p["lat"], _lon(p)],
+            popup=folium.Popup(popup_html, max_width=300),
+            tooltip=actor_name,
             icon=folium.Icon(color=color)
         ).add_to(m)
 
@@ -197,3 +215,32 @@ def show_map_with_radius(points: list, radius_km: float = 10, zoom: int = 12):
     ).add_to(m)
 
     return m, (center_lat, center_lon), inside, outside
+
+
+def cercle(coords: dict, map_object: folium.Map, radius_km: float = 2.0, 
+           color: str = "blue", fill_opacity: float = 0.15, **kwargs) -> None:
+    """
+    Ajoute un cercle sur une carte Folium.
+    
+    Args:
+        coords: dict avec keys 'lat' et 'lng'
+        map_object: objet folium.Map
+        radius_km: rayon du cercle en kilomètres
+        color: couleur du cercle
+        fill_opacity: opacité du remplissage
+        **kwargs: arguments supplémentaires pour folium.Circle
+    """
+    if not coords or not coords.get('lat') or not coords.get('lng'):
+        logger.warning("Coordonnées invalides pour le cercle")
+        return
+    
+    folium.Circle(
+        location=[coords['lat'], coords['lng']],
+        radius=radius_km * 1000,  # Convert km to meters
+        color=color,
+        fill=True,
+        fillColor=color,
+        fillOpacity=fill_opacity,
+        opacity=0.5,
+        **kwargs
+    ).add_to(map_object)

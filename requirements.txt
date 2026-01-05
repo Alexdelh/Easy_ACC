@@ -2,6 +2,7 @@ branca==0.8.2
 certifi==2025.11.12
 charset-normalizer==3.4.4
 folium==0.20.0
+geopy==2.4.0
 idna==3.11
 Jinja2==3.1.6
 MarkupSafe==3.0.3
@@ -9,3 +10,8 @@ numpy==2.3.5
 requests==2.32.5
 urllib3==2.5.0
 xyzservices==2025.11.0
+streamlit-folium==0.11.1
+pandas==2.0.0
+openpyxl==3.10.0
+pvlib==0.10.5
+plotly==5.18.0
