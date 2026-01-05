@@ -13,9 +13,11 @@ dependencies = [
     "plotly>=5.15.0",
     "scipy>=1.16.1",
     "streamlit>=1.25.0",
+    "streamlit-folium>=0.20.0",
     "pyarrow~=12.0.1",
     "folium~=0.20.0",
-    "openpyxl>=3.1.0"
+    "openpyxl>=3.1.0",
+    "geopy>=2.4.0"
 ]
 
 [dependency-groups]
