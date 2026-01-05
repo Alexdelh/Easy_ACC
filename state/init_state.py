@@ -14,7 +14,7 @@ DEFAULTS = {
     "consumers_df": None,
     "producers_df": None,
     "current_phase": "precalibrage",
-    "precalibrage_page": 1,
+    "precalibrage_page": 0,
     "bilan_page": 1,
     "scenario_generated": False,
 }
