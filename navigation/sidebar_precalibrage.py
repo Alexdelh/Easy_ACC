@@ -56,18 +56,20 @@ def render_sidebar_precalibrage():
         st.divider()
         
         # --- Save Persistence ---
-        from services.database import save_project
-        from services.state_serializer import serialize_state
-        
-        # Simple Save Button at bottom
-        if st.button("💾 Sauver l'état", use_container_width=True, help="Enregistrer le projet en base de données"):
-            try:
-                state_to_save = serialize_state(dict(st.session_state))
-                save_project(
-                    name=st.session_state.get("project_name", "Sans titre"),
-                    current_phase="precalibrage",
-                    state_dict=state_to_save
-                )
-                st.toast("✅ Projet sauvegardé")
-            except Exception as e:
-                st.error(f"Erreur sauvegarde: {e}")
+        # Only show save button if we are inside a project (page > 0)
+        if current_page > 0:
+            from services.database import save_project
+            from services.state_serializer import serialize_state
+            
+            # Simple Save Button at bottom
+            if st.button("💾 Sauver l'état", use_container_width=True, help="Enregistrer le projet en base de données"):
+                try:
+                    state_to_save = serialize_state(dict(st.session_state))
+                    save_project(
+                        name=st.session_state.get("project_name", "Sans titre"),
+                        current_phase="precalibrage",
+                        state_dict=state_to_save
+                    )
+                    st.toast("✅ Projet sauvegardé")
+                except Exception as e:
+                    st.error(f"Erreur sauvegarde: {e}")
