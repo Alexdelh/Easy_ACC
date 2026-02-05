@@ -10,6 +10,9 @@ def render():
     
     # Initialize DB (idempotent)
     init_db()
+    
+    # Import serialize_state for auto-save
+    from services.state_serializer import serialize_state
 
     # --- Actions bar ---
     col_new, col_spacer = st.columns([0.4, 0.6])
@@ -23,14 +26,23 @@ def render():
                     from state.init_state import init_session_state
                     init_session_state()
                     
-                    # 2. Set Project Name
-                    st.session_state["project_name"] = new_name.strip()
-                    st.session_state["current_phase"] = "precalibrage"
-                    st.session_state["precalibrage_page"] = 1 # Start at General
-                    
-                    st.success(f"Nouveau projet '{new_name}' initialisé!")
-                    time.sleep(0.5)
-                    st.rerun()
+                    # 2. Save Initial Project to DB to get ID (Atomic Requirement)
+                    try:
+                        project_id = save_project(
+                            name=new_name.strip(),
+                            current_phase="precalibrage",
+                            state_dict=serialize_state(dict(st.session_state))
+                        )
+                        st.session_state["project_id"] = project_id
+                        st.session_state["project_name"] = new_name.strip()
+                        st.session_state["current_phase"] = "precalibrage"
+                        st.session_state["precalibrage_page"] = 1 # Start at General
+                        
+                        st.success(f"Nouveau projet '{new_name}' créé et sauvegardé (ID: {project_id})")
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erreur lors de la création: {e}")
                 else:
                     st.warning("Veuillez entrer un nom.")
 
@@ -87,6 +99,7 @@ def render():
                             
                             st.session_state["project_name"] = project_data["name"]
                             st.session_state["current_phase"] = project_data["current_phase"]
+                            st.session_state["project_id"] = project_data["id"]
                             
                             st.toast(f"Projet '{project_data['name']}' chargé !", icon="✅")
                             time.sleep(0.5)

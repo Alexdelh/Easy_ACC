@@ -10,6 +10,7 @@ import html
 import re
 import logging
 from geopy.distance import geodesic
+from services.database import save_dataset, list_datasets, load_dataset
 
 
 logging.basicConfig(level=logging.INFO)
@@ -393,8 +394,8 @@ def render():
         
         with col3:
             state["adresse"] = st.text_input("Adresse *", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris")
-            state["source"] = st.radio("Source de la courbe de production", ["Aucune", "Téléverser XLS", "Modéliser via PVGIS"], 
-                                       index=["Aucune", "Téléverser XLS", "Modéliser via PVGIS"].index(state["source"]))
+            state["source"] = st.radio("Source de la courbe de production", ["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"], 
+                                       index=["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"].index(state["source"]) if state["source"] in ["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"] else 0)
         
         # Handle curve upload/generation based on source
         st.markdown("**Courbe de production**")
@@ -477,8 +478,39 @@ def render():
                             else:
                                 st.error("⚠️ Impossible de géolocaliser l'adresse")
                                 state["curve_data"] = None
+                                st.error("⚠️ Impossible de géolocaliser l'adresse")
+                                state["curve_data"] = None
             
-            elif state["source"] == "Aucune":
+            elif state["source"] == "📚 Bibliothèque":
+                # List available datasets of type 'production_curve' for the current project
+                project_id = st.session_state.get("project_id")
+                if not project_id:
+                    st.warning("⚠️ Veuillez sauvegarder le projet avant d'accéder à la bibliothèque.")
+                    datasets = []
+                else:
+                    datasets = list_datasets(project_id=project_id, dataset_type="production_curve")
+                
+                if not datasets:
+                    st.info("📂 Aucune courbe sauvegardée dans la bibliothèque.")
+                else:
+                    options = {d['name']: d['id'] for d in datasets}
+                    selected_name = st.selectbox("Choisir un profil sauvegardé", options=["-- Sélectionner --"] + list(options.keys()))
+                    
+                    if selected_name != "-- Sélectionner --":
+                        dataset_id = options[selected_name]
+                        if st.button("📥 Charger ce profil", use_container_width=True):
+                            loaded = load_dataset(dataset_id)
+                            if loaded:
+                                state["curve_data"] = loaded["data"]
+                                st.success(f"✅ Profil '{selected_name}' chargé !")
+                                
+                                # Use metadata to fill other fields if available and empty
+                                meta = loaded.get("metadata", {})
+                                if meta:
+                                    if not state["nom"] and "original_name" in meta:
+                                        state["nom"] = meta["original_name"]
+                            else:
+                                st.error("Erreur lors du chargement du profil.")
                 st.info("Pas de courbe de production pour ce point")
         
         with col_curve2:
@@ -500,6 +532,41 @@ def render():
                             volume_total = norm_df['value'].sum()
                             volume_mwh = volume_total / 1000.0  # Conversion kWh -> MWh
                             st.metric("Volume produit estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
+                            volume_mwh = volume_total / 1000.0  # Conversion kWh -> MWh
+                            st.metric("Volume produit estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
+                        
+                        st.divider()
+                        # Save to Library Button
+                        with st.popover("💾 Sauver en Bibliothèque"):
+                            st.markdown("##### Sauvegarder ce profil")
+                            save_name = st.text_input("Nom du profil", value=state["nom"] if state["nom"] else "Nouveau profil")
+                            if st.button("Confirmer sauvegarde", type="primary", use_container_width=True):
+                                if save_name:
+                                    try:
+                                        # Metadata to help with context
+                                        meta = {
+                                            "source_type": state["source"],
+                                            "original_name": state["nom"],
+                                            "address": state["adresse"],
+                                            "peak_power": state["puissance"]
+                                        }
+                                        project_id = st.session_state.get("project_id")
+                                        if not project_id:
+                                             st.error("⚠️ Projet non identifié. Sauvegardez le projet d'abord.")
+                                        else:
+                                            save_dataset(
+                                                project_id=project_id,
+                                                name=save_name,
+                                                type="production_curve",
+                                                data=state["curve_data"],
+                                                metadata=meta
+                                            )
+                                        st.toast(f"✅ Profil '{save_name}' sauvegardé !")
+                                    except Exception as e:
+                                        st.error(f"Erreur sauvegarde: {e}")
+                                else:
+                                    st.error("Le nom est obligatoire.")
+
                     else:
                         st.warning("⚠️ Courbe non exploitable pour l'affichage.")
                         if result.get('errors'):
