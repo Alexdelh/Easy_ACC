@@ -65,11 +65,13 @@ def render_sidebar_precalibrage():
             if st.button("💾 Sauver l'état", use_container_width=True, help="Enregistrer le projet en base de données"):
                 try:
                     state_to_save = serialize_state(dict(st.session_state))
-                    save_project(
+                    project_id = save_project(
                         name=st.session_state.get("project_name", "Sans titre"),
                         current_phase="precalibrage",
-                        state_dict=state_to_save
+                        state_dict=state_to_save,
+                        project_id=st.session_state.get("project_id")
                     )
+                    st.session_state["project_id"] = project_id
                     st.toast("✅ Projet sauvegardé")
                 except Exception as e:
                     st.error(f"Erreur sauvegarde: {e}")
