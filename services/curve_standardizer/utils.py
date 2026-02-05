@@ -129,7 +129,7 @@ def try_parse_datetime(series: pd.Series) -> Optional[pd.DatetimeIndex]:
     Returns DatetimeIndex if successful, None otherwise.
     """
     try:
-        dt = pd.to_datetime(series, infer_datetime_format=True, errors='coerce')
+        dt = pd.to_datetime(series, errors='coerce')
         if dt.isna().sum() > len(dt) * 0.5:  # More than 50% NaT → likely not datetime
             return None
         return dt

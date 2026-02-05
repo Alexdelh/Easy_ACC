@@ -48,6 +48,12 @@ def validate_curve(df: pd.DataFrame) -> Dict[str, any]:
     
     # Check for future dates
     now = pd.Timestamp.now()
+    if df.index.tz is not None:
+        if now.tz is None:
+            now = now.tz_localize(df.index.tz)
+        else:
+            now = now.tz_convert(df.index.tz)
+            
     if (df.index > now).any():
         future_count = (df.index > now).sum()
         report['warnings'].append(f"Found {future_count} future timestamps")
