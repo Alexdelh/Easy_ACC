@@ -2,6 +2,13 @@ from typing import Dict
 import re
 import streamlit as st
 from geopy.geocoders import Nominatim
+import ssl
+import certifi
+import geopy.geocoders
+
+# Fix for macOS SSL certificate errors: explicitly use certifi's CA bundle & create a context
+ctx = ssl.create_default_context(cafile=certifi.where())
+geopy.geocoders.options.default_ssl_context = ctx
 
 # Placeholder service for geolocation; will replace utils.helpers later
 GEO_DATABASE = {
@@ -42,7 +49,10 @@ def get_coordinates_from_address(address: str) -> Dict[str, float]:
     
     # Fall back to live API using Nominatim
     try:
-        geolocator = Nominatim(user_agent="acc_app_v1")
+        geopy.geocoders.options.default_ssl_context = ctx
+        geopy.geocoders.options.default_timeout = 10
+        
+        geolocator = Nominatim(user_agent="acc_app_v1", ssl_context=ctx)
         location = geolocator.geocode(
             address, 
             country_codes="FR",  # Forcer France
