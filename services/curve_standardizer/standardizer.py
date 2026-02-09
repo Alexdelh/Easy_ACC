@@ -141,6 +141,45 @@ class CurveStandardizer:
             df = df[numeric_cols]
         
         return df
+
+    def process_preview(self, file_or_df) -> Dict:
+        """Lightweight preview pipeline that delegates to `process_curve`.
+
+        This keeps backward compatibility for UIs using `CurveStandardizer` to
+        preview curves while reusing the unified multi-format pipeline.
+
+        It sets `self.parsed_df`, `self.metadata` and `self.validation_report`
+        from the processed result so existing callers can continue to use
+        `standardizer.parsed_df` for plotting.
+
+        Returns a dict similar to `process_curve` with keys:
+        'success', 'df', 'metadata', 'validation', 'impute_report', 'errors'
+        """
+        result = {
+            'success': False,
+            'df': None,
+            'metadata': None,
+            'validation': None,
+            'impute_report': None,
+            'errors': [],
+        }
+
+        try:
+            # Local import to avoid circular dependency at module import time
+            from services.curve_processing import process_curve
+            proc = process_curve(file_or_df)
+            # copy relevant fields
+            result.update(proc)
+
+            if proc.get('success') and proc.get('df') is not None:
+                self.parsed_df = proc.get('df')
+                self.metadata = proc.get('metadata')
+                self.validation_report = proc.get('validation')
+
+        except Exception as e:
+            result['errors'].append(str(e))
+
+        return result
     
     def get_export(self, format_type: str, timestep: str = 'PT60M') -> Optional[pd.DataFrame]:
         """

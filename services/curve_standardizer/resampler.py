@@ -70,7 +70,8 @@ def resample_curve(
         })
         # If original was at coarser timestep, convert sum to mean power
         # This is a simplification; ideally we'd know the unit context
-        if 'PT15M' in source_timestep or '15min' in str(source_timestep):
+        # If source_timestep contains '15min' marker, keep sum behavior
+        if source_timestep and ('PT15M' in source_timestep or '15min' in str(source_timestep) or '15T' in str(source_timestep)):
             # 15min → 60min: sum 4 values to get total energy
             pass  # Keep as sum
     else:  # interpolate

@@ -48,6 +48,38 @@ def render_sidebar_precalibrage():
         if current_page == max(PRECALIBRAGE_MENU.keys()):
             st.divider()
             if st.button("Générer le scénario", type="primary", use_container_width=True):
+                # Call aggregation to build consolidated DataFrames
+                with st.spinner("Agrégation des courbes..."):
+                    try:
+                        from services.data_aggregation import build_dataframes
+                        
+                        points_consumers = st.session_state.get("points_consumers", [])
+                        points_producers = st.session_state.get("points_producers", [])
+                        
+                        consumers_df, producers_df, aggregation_summary = build_dataframes(
+                            points_consumers, points_producers
+                        )
+                        
+                        # Store results in session_state
+                        st.session_state["consumers_df"] = consumers_df
+                        st.session_state["producers_df"] = producers_df
+                        st.session_state["aggregation_summary"] = aggregation_summary
+                        
+                        # Log any errors/warnings
+                        if aggregation_summary.get("errors"):
+                            for error in aggregation_summary["errors"]:
+                                st.warning(f"⚠️ {error}")
+                        
+                        st.success(
+                            f"✅ Agrégation complète: "
+                            f"{aggregation_summary.get('consumers_with_data', 0)} consommateurs, "
+                            f"{aggregation_summary.get('producers_with_data', 0)} producteurs"
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Erreur agrégation: {e}")
+                        import traceback
+                        st.error(traceback.format_exc())
+                
                 st.session_state["scenario_generated"] = True
                 st.session_state["current_phase"] = "bilan"
                 st.session_state["bilan_page"] = 1
