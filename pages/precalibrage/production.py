@@ -5,7 +5,7 @@ from streamlit_folium import st_folium
 from utils.helpers import get_coordinates_from_postal_code
 from services.geolocation import get_coordinates_from_address
 from services.pvgis import compute_pv_curve
-from services.curve_standardizer import CurveStandardizer
+from services.curve_processing import process_curve
 import html
 import re
 import logging
@@ -520,24 +520,24 @@ def render():
             # Display curve preview if available
             if state["curve_data"] is not None:
                 st.markdown("**📊 Aperçu**")
-                # Use CurveStandardizer for normalization
                 try:
-                    standardizer = CurveStandardizer(prm_id=state.get("nom", "temp"))
-                    result = standardizer.process(state["curve_data"])
-                    
-                    if result['success'] and standardizer.parsed_df is not None and len(standardizer.parsed_df) > 0:
-                        norm_df = standardizer.parsed_df
-                        st.line_chart(norm_df, use_container_width=True, height=300)
+                    result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
+
+                    if result.get('success') and result.get('df') is not None and len(result['df']) > 0:
+                        norm_df = result['df']
+                        if 'value' in norm_df.columns:
+                            st.line_chart(norm_df['value'], use_container_width=True, height=300)
+                        else:
+                            st.line_chart(norm_df, use_container_width=True, height=300)
+
                         st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
-                        
+
                         # Calculer le volume produit
                         if 'value' in norm_df.columns:
                             volume_total = norm_df['value'].sum()
-                            volume_mwh = volume_total / 1000.0  # Conversion kWh -> MWh
+                            volume_mwh = volume_total / 1000.0
                             st.metric("Volume produit estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
-                            volume_mwh = volume_total / 1000.0  # Conversion kWh -> MWh
-                            st.metric("Volume produit estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
-                        
+
                         st.divider()
                         # Save to Library Button
                         with st.popover("💾 Sauver en Bibliothèque"):
@@ -607,7 +607,14 @@ def render():
                             state["coords"] = None
                     
                     if state["coords"]:
-                        # Create and add point
+                        # Process uploaded curve and store processing result
+                        processed = None
+                        try:
+                            processed = process_curve(state["curve_data"]) if state.get("curve_data") is not None else None
+                        except Exception as e:
+                            st.error(f"Erreur traitement courbe: {e}")
+
+                        # Create and add point (store processed result for aggregation)
                         new_point = {
                             "nom": state["nom"],
                             "type": state["type"],
@@ -617,7 +624,10 @@ def render():
                             "valorisation": state["valorisation"],
                             "adresse": state["adresse"],
                             "hypothetical": False,
-                            "courbe_production": state["curve_data"],
+                            "courbe_production": (
+                                {"df": processed.get("df"), "metadata": processed.get("metadata"), "impute_report": processed.get("impute_report")} 
+                                if processed and processed.get("success") else state.get("curve_data")
+                            ),
                             "lat": state["coords"]["lat"],
                             "lng": state["coords"]["lng"]
                         }
