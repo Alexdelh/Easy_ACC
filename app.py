@@ -37,9 +37,6 @@ if current_phase == "precalibrage":
     elif page_num == 4:
         from pages.precalibrage import parametres
         parametres.render()
-    elif page_num == 5:
-        from pages.precalibrage import financier
-        financier.render()
 
 elif current_phase == "bilan":
     from navigation.sidebar_bilan import render_sidebar_bilan
@@ -51,6 +48,3 @@ elif current_phase == "bilan":
     if bilan_page == 1:
         from pages.bilan import energie
         energie.render()
-    elif bilan_page == 2:
-        from pages.bilan import financier
-        financier.render()

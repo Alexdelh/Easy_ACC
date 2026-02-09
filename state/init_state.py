@@ -17,6 +17,12 @@ DEFAULTS = {
     "precalibrage_page": 0,
     "bilan_page": 1,
     "scenario_generated": False,
+    # Paramètres de répartition
+    "repartition_mode": "Clé par défaut (pourcentages)",
+    "surplus_mode": "Clé par défaut (prorata puissance)",
+    "consumer_percentages": {},
+    "consumer_priorities": {},
+    "seasonal_participation": {},
 }
 
 

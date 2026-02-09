@@ -59,7 +59,7 @@ class CurveStandardizer:
         }
         
         try:
-            # Step 1: Parse
+
             print("[CurveStandardizer] Parsing input...")
             self.parsed_df, metadata = parse_curve(file_or_df)
             self.metadata = metadata

@@ -3,7 +3,6 @@ import streamlit as st
 
 BILAN_MENU = {
     1: "Énergie",
-    2: "Financier",
 }
 
 
@@ -22,17 +21,6 @@ def render_sidebar_bilan():
                 st.markdown(f"○ {label}")
         
         st.divider()
-        
-        # Navigation buttons
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Énergie", use_container_width=True, disabled=(current_page == 1)):
-                st.session_state["bilan_page"] = 1
-                st.rerun()
-        with col2:
-            if st.button("Financier", use_container_width=True, disabled=(current_page == 2)):
-                st.session_state["bilan_page"] = 2
-                st.rerun()
         
         st.divider()
         
