@@ -414,7 +414,10 @@ def render():
                     try:
                         name = uploaded_file.name.lower()
                         if name.endswith(".csv"):
-                            curve_df = pd.read_csv(uploaded_file)
+                            # Use sep=None with python engine for auto-detection of separator (handles ; or ,)
+                            curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
+                            # Clean column names (remove BOM and whitespace)
+                            curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
                         else:
                             curve_df = pd.read_excel(uploaded_file)
                         state["curve_data"] = curve_df
