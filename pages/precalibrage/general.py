@@ -98,7 +98,7 @@ def render():
                 - **Périmètre d'opération**: {st.session_state.get('distance_constraint', '2 km')}
                 """)
             else:
-                st.error(f"❌ {coords['city']}")
+                st.error(f" {coords['city']}")
                 st.info("Entrez un code postal valide pour voir la localisation sur la carte.")
         else:
             st.info("Entrez un code postal pour voir sa localisation sur la carte.")
