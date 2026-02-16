@@ -16,6 +16,12 @@ if "bilan_page" not in st.session_state:
 # Render appropriate sidebar based on current phase
 current_phase = st.session_state["current_phase"]
 
+# If a scenario was just generated, ensure we switch to 'bilan' immediately
+if st.session_state.get("scenario_generated"):
+    st.session_state["current_phase"] = "bilan"
+    st.session_state.setdefault("bilan_page", 1)
+    current_phase = "bilan"
+
 if current_phase == "precalibrage":
     render_sidebar_precalibrage()
     
@@ -37,9 +43,7 @@ if current_phase == "precalibrage":
     elif page_num == 4:
         from pages.precalibrage import parametres
         parametres.render()
-    elif page_num == 5:
-        from pages.precalibrage import financier
-        financier.render()
+    # page_num == 5 (Financier) removed from précalibrage — nothing to do
 
 elif current_phase == "bilan":
     from navigation.sidebar_bilan import render_sidebar_bilan
