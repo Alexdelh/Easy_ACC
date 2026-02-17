@@ -7,7 +7,6 @@ PRECALIBRAGE_MENU = {
     2: "Points d'injection",
     3: "Points de soutirage",
     4: "Paramètres",
-    5: "Financier",
 }
 
 
