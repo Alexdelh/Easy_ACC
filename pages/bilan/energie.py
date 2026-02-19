@@ -48,7 +48,7 @@ def render():
         </style>
         """, unsafe_allow_html=True)
         st.button("📄 Exporter PDF")
-        st.write("Période : 31 jan 2024 – 31 jan 2025")
+        # st.write("Période : 31 jan 2024 – 31 jan 2025")
     with col_title:
         st.markdown("<div class='big-title'>Taux de couverture</div>", unsafe_allow_html=True)
 
@@ -157,3 +157,9 @@ def render():
     fig_conso = px.line(df, x="Month", y=["Consommation Totale", "Consommation Autoconsommée"]); fig_conso.update_layout(title="Rapport de Consommation", legend_title="")
     fig_prod = px.line(df, x="Month", y=["Production Totale", "Production Autoconsommée"]); fig_prod.update_layout(title="Rapport de Production", legend_title="")
     st.markdown("---"); st.plotly_chart(fig_conso, use_container_width=True); st.plotly_chart(fig_prod, use_container_width=True)
+
+    st.markdown('---')
+    st.markdown('### Données brutes (debug)')
+    # st.write('Points de production:', st.session_state.get('points_production', []))
+    # st.write('Points de soutirage (consommateurs):', st.session_state.get('points_soutirage', []))
+    # st.write('Résumé:', st.session_state.get('summary'))

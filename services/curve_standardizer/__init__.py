@@ -16,7 +16,7 @@ Usage:
     pvgis_str = standardizer.get_export('pvgis', 'PT15M')
 """
 
-from .parser import parse_curve
+## from .parser import parse_curve  # Désactivé : plus utilisé dans le flux principal
 from .validator import validate_curve
 from .resampler import resample_curve
 from .formatters import (
@@ -39,7 +39,7 @@ __all__ = [
     'CurveStandardizer',
     
     # Pipeline functions
-    'parse_curve',
+    # 'parse_curve',  # Désactivé : plus utilisé dans le flux principal
     'validate_curve',
     'resample_curve',
     

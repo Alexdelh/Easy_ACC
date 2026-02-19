@@ -59,15 +59,24 @@ class CurveStandardizer:
         }
         
         try:
-
-            print("[CurveStandardizer] Parsing input...")
-            self.parsed_df, metadata = parse_curve(file_or_df)
-            self.metadata = metadata
-            result['parsed'] = {
-                'rows': len(self.parsed_df),
-                'metadata': metadata,
-            }
-            print(f"  [OK] Parsed {len(self.parsed_df)} rows")
+            # Si on reçoit déjà un DataFrame, on l'utilise directement
+            if isinstance(file_or_df, pd.DataFrame):
+                self.parsed_df = file_or_df
+                self.metadata = {}  # À adapter si besoin d'extraire des métadonnées
+                result['parsed'] = {
+                    'rows': len(self.parsed_df),
+                    'metadata': self.metadata,
+                }
+                print(f"[CurveStandardizer] DataFrame reçu directement: {len(self.parsed_df)} lignes")
+            else:
+                print("[CurveStandardizer] Parsing input...")
+                self.parsed_df, metadata = parse_curve(file_or_df)
+                self.metadata = metadata
+                result['parsed'] = {
+                    'rows': len(self.parsed_df),
+                    'metadata': metadata,
+                }
+                print(f"  [OK] Parsed {len(self.parsed_df)} rows")
             
             # Step 2: Validate
             print("[CurveStandardizer] Validating curve...")

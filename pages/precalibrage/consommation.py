@@ -1,6 +1,6 @@
+import pandas as pd
 import streamlit as st
 import folium
-import pandas as pd
 from streamlit_folium import st_folium
 from utils.helpers import get_coordinates_from_postal_code
 from services.geolocation import get_coordinates_from_address
@@ -548,3 +548,37 @@ def render():
                     import traceback
                     st.error(f"Erreur affichage carte: {e}")
                     st.code(traceback.format_exc())
+
+        # Nettoyage : suppression des st.write() de debug
+
+        # --- Création du DataFrame croisé consommateurs (datetime en index, noms en colonnes, valeurs = consommation) ---
+        try:
+            points = st.session_state.get("points_soutirage", [])
+            dfs = []
+            for p in points:
+                courbe = p.get("courbe_consommation")
+                nom = p.get("nom", "Consommateur")
+                if isinstance(courbe, dict) and "df" in courbe:
+                    df = courbe["df"]
+                elif isinstance(courbe, pd.DataFrame):
+                    df = courbe
+                else:
+                    continue
+                # On prend uniquement les colonnes datetime (index) et value
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    if "datetime" in df.columns:
+                        df = df.set_index("datetime")
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    continue
+                if "value" not in df.columns:
+                    continue
+                # On ne garde que la colonne value, et on la renomme par le nom du consommateur
+                dfs.append(df[["value"]].rename(columns={"value": nom}))
+            if dfs:
+                df_conso = pd.concat(dfs, axis=1)
+                st.session_state["df_conso"] = df_conso
+                # st.write("DataFrame croisé consommateurs :", df_conso)
+            else:
+                pass  # Aucun DataFrame valide
+        except Exception as e:
+            st.error(f"Erreur création DataFrame croisé consommateurs : {e}")
