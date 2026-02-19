@@ -15,31 +15,48 @@ def render():
     with col1:
         st.subheader("Configuration du projet")
         
+        st.session_state.setdefault("project_name", "") # Ensure initialized
         project_name = st.text_input(
             "Nom de l'opération",
-            value=st.session_state.get("project_name", ""),
+            value=st.session_state["project_name"],
         )
         st.session_state["project_name"] = project_name
 
+        st.session_state.setdefault("postal_code", "") # Ensure initialized
         postal_code = st.text_input(
             "Code postal",
-            value=st.session_state.get("postal_code", ""),
+            value=st.session_state["postal_code"],
             placeholder="Ex: 75001",
             max_chars=5
         )
         st.session_state["postal_code"] = postal_code
 
+        # Dynamic index for Distance Constraint
+        current_distance = st.session_state.get("distance_constraint", "2 km")
+        try:
+            dist_index = DISTANCE_OPTIONS.index(current_distance)
+        except ValueError:
+            dist_index = 0
+
         distance_constraint = st.selectbox(
             "Distance contrainte",
             DISTANCE_OPTIONS,
-            index=0,
+            index=dist_index,
         )
         st.session_state["distance_constraint"] = distance_constraint
 
+        # Dynamic index for Operation Type
+        OPERATION_TYPES = ["Ouverte", "Patrimoniale"]
+        current_op_type = st.session_state.get("operation_type", "Ouverte")
+        try:
+            op_index = OPERATION_TYPES.index(current_op_type)
+        except ValueError:
+            op_index = 0
+
         operation_type = st.selectbox(
             "Type d'opération",
-            ["Ouverte", "Patrimoniale"],
-            index=0 if st.session_state.get("operation_type", "Ouverte") == "Ouverte" else 1,
+            OPERATION_TYPES,
+            index=op_index,
         )
         st.session_state["operation_type"] = operation_type
         
