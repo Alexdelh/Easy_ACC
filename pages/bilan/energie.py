@@ -160,6 +160,5 @@ def render():
 
     st.markdown('---')
     st.markdown('### Données brutes (debug)')
-    # st.write('Points de production:', st.session_state.get('points_production', []))
-    # st.write('Points de soutirage (consommateurs):', st.session_state.get('points_soutirage', []))
-    # st.write('Résumé:', st.session_state.get('summary'))
+    
+    st.write('Résumé:', st.session_state.get('summary'))

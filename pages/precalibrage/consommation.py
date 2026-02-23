@@ -577,7 +577,7 @@ def render():
             if dfs:
                 df_conso = pd.concat(dfs, axis=1)
                 st.session_state["df_conso"] = df_conso
-                # st.write("DataFrame croisé consommateurs :", df_conso)
+                st.write("DataFrame croisé consommateurs :", df_conso)
             else:
                 pass  # Aucun DataFrame valide
         except Exception as e:
