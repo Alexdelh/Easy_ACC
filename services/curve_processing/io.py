@@ -112,9 +112,33 @@ def read_curve(file_or_df: Any) -> Tuple[pd.DataFrame, Dict[str, Any]]:
 
 
 def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]:
+
     """Detect format and return (datetime_col, value_col, format_name)."""
     cols = df.columns.tolist()
     cols_lower = [c.lower() for c in cols]
+
+    # PVGIS Format (ex: 20050101:1410;613)
+    if len(cols) == 2:
+        import re
+        sample = df.iloc[:5, 0].astype(str)
+        pvgis_pattern = re.compile(r"^\d{8}:\d{4}$")
+        if sample.apply(lambda x: bool(pvgis_pattern.match(x))).sum() >= 3:
+            return cols[0], cols[1], "PVGIS"
+
+
+
+    # Archelios Format (header or no header, ; separated)
+    # Check if first column header contains 'date' and second contains 'kw' or 'valeur'
+    if len(cols) == 2:
+        if ("date" in cols_lower[0] or "heure" in cols_lower[0]) and ("kw" in cols_lower[1] or "valeur" in cols_lower[1]):
+            return cols[0], cols[1], "Archelios"
+        # Check if first col looks like datetime and second like numeric (no header or generic header)
+        try:
+            pd.to_datetime(df.iloc[:5, 0], errors="coerce")
+            if pd.to_datetime(df.iloc[:5, 0], errors="coerce").notna().sum() >= 3:
+                return cols[0], cols[1], "Archelios"
+        except Exception:
+            pass
 
     # ALEX Format (simple: datetime + W columns with comma delimiter)
     if len(cols) == 2 and "datetime" in cols_lower and "w" in cols_lower:
@@ -129,17 +153,6 @@ def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]
     # EMS Format (consumption)
     if "date" in cols_lower and "valeur" in cols_lower:
         return "date", "valeur", "EMS"
-
-    # Archelios Format (no header, try first two columns)
-    if len(cols) >= 2:
-        # Check if first col looks like datetime and second like numeric
-        try:
-            pd.to_datetime(df.iloc[:5, 0], errors="coerce")
-            # At least 3 of 5 are parseable
-            if pd.to_datetime(df.iloc[:5, 0], errors="coerce").notna().sum() >= 3:
-                return cols[0], cols[1], "Archelios"
-        except Exception:
-            pass
 
     # Fallback: find any datetime-like and numeric columns
     dt_col = None

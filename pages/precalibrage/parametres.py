@@ -17,37 +17,10 @@ def safe_rerun():
             st.session_state["__rerun_flag"] = not st.session_state.get("__rerun_flag", False)
 
 def render():
-    """Render the Paramètres page."""
+   
     st.title("Paramètres du projet")
-
-    st.subheader("Participation et clés de répartition")
-    # Utiliser les points de soutirage comme liste de consommateurs
-    points_soutirage = st.session_state.get("points_soutirage", [])
-    consumers = [p.get("nom", f"Consommateur {i+1}") for i, p in enumerate(points_soutirage)]
-
-    st.markdown("**Participation saisonnière (activée)**")
-    # Seasonal participation table (per consumer x month) — always shown
-    months = list(calendar.month_name)[1:13]
-    if not consumers:
-        st.info("Aucun point de soutirage importé — importez des consommateurs dans 'Points de soutirage' pour activer la table.")
-    else:
-        st.markdown("**Participation mensuelle par consommateur**")
-        sp = st.session_state.get("seasonal_participation", {})
-        for idx, c in enumerate(consumers):
-            cols = st.columns([0.28] + [0.06] * 12)
-            cols[0].markdown(f"**{c}**")
-            row = sp.get(c, {m: True for m in months})
-            for mi, m in enumerate(months, start=1):
-                key = f"season_{idx}_{mi}"
-                checked = row.get(m, True)
-                val = cols[mi].checkbox("", value=checked, key=key)
-                row[m] = val
-            sp[c] = row
-        st.session_state["seasonal_participation"] = sp
-
-    st.divider()
-
     st.markdown("**Clé de répartition**")
+    consumers = st.session_state.get("consumers", [])
     repartition_mode = st.radio(
         "Choisissez la méthode de répartition :",
         ("Clé par défaut", "Clé statique (pourcentages par consommateur)", "Clé dynamique simple"),

@@ -27,4 +27,5 @@ def render_sidebar_bilan():
         # Back to precalibrage button
         if st.button("← Retour au précalibrage", use_container_width=True):
             st.session_state["current_phase"] = "precalibrage"
+            st.session_state["scenario_generated"] = False
             st.rerun()

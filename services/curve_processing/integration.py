@@ -2,25 +2,25 @@
 
 This wrapper:
 1. Calls io.read_curve() for flexible format detection (EMS, SGE, Archelios, etc)
-2. Uses existing services.curve_standardizer.resample_curve() for 1h standardization
+2. Uses resample_curve() for 1h standardization
 3. Applies impute_by_week_shift() for missing value imputation
-4. Validates with services.curve_standardizer.validate_curve()
+4. Validates with validate_curve()
 
 Returns consistent output: { success, df, metadata, validation, impute_report, errors }
 
 The output df has DatetimeIndex (UTC naive, hourly) and columns:
-- 'value' : numeric values in W or kW
+- 'value' : numeric values in kW
 - '_imputed' : bool, True if value was imputed
 - '_impute_source' : int, week offset used for imputation (0 = original)
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 import pandas as pd
 
 from .io import read_curve
-from services.curve_standardizer.resampler import resample_curve
-from services.curve_standardizer.validator import validate_curve
+from .resampler import resample_curve
+from .validator import validate_curve
 from .imputer import impute_by_week_shift
 
 
