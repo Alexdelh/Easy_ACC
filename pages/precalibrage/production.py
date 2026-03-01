@@ -305,42 +305,44 @@ def render():
             st.markdown(table_html, unsafe_allow_html=True)
             
             # Display each point with action buttons
+            if "edit_injection_idx" not in st.session_state:
+                st.session_state["edit_injection_idx"] = None
+            if "edit_injection_idx" not in st.session_state:
+                st.session_state["edit_injection_idx"] = None
+            if "edit_injection_form" not in st.session_state:
+                st.session_state["edit_injection_form"] = None
             for idx, point in enumerate(points):
-                # Create columns for data display and action buttons
+                highlight = (st.session_state["edit_injection_idx"] == idx)
+                row_style = "background-color:#e3f0ff; color:#1565c0; font-weight:bold; border-radius:6px;" if highlight else ""
                 cols = st.columns([0.18, 0.13, 0.11, 0.14, 0.11, 0.18, 0.15])
-                
                 with cols[0]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['nom']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['nom']}</div>", unsafe_allow_html=True)
                 with cols[1]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['type']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['type']}</div>", unsafe_allow_html=True)
                 with cols[2]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['segment']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[3]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{int(point['puissance'])}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{int(point['puissance'])}</div>", unsafe_allow_html=True)
                 with cols[4]:
                     tva_status = "✅" if point.get('tva', False) else "❌"
-                    st.markdown(f"<div style='padding: 4px 0;'>{tva_status}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{tva_status}</div>", unsafe_allow_html=True)
                 with cols[5]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['valorisation']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['valorisation']}</div>", unsafe_allow_html=True)
                 with cols[6]:
-                    # Action buttons with emojis
                     action_cols = st.columns([1, 1, 1], gap="small")
-                    
                     with action_cols[0]:
                         if st.button("✏️", key=f"edit_{idx}", help="Modifier", use_container_width=True):
-                            st.info("Fonction de modification à venir")
-                    
+                            st.session_state["edit_injection_idx"] = idx
+                            st.session_state["edit_injection_form"] = point.copy()
+                            st.rerun()
                     with action_cols[1]:
                         if st.button("📋", key=f"dup_{idx}", help="Dupliquer", use_container_width=True):
-                            # Duplicate the point
                             duplicated_point = point.copy()
                             duplicated_point["nom"] = f"{point['nom']} (copie)"
                             st.session_state["points_injection"].append(duplicated_point)
                             st.success(f"✅ Point '{point['nom']}' dupliqué!")
                             st.rerun()
-                    
                     with action_cols[2]:
-                        # Two-step deletion with confirmation
                         if st.session_state["confirm_delete_injection"] == idx:
                             if st.button("✓", key=f"confirm_{idx}", help="Confirmer la suppression", use_container_width=True):
                                 st.session_state["points_injection"].pop(idx)
@@ -351,241 +353,288 @@ def render():
                             if st.button("🗑️", key=f"delete_{idx}", help="Supprimer", use_container_width=True):
                                 st.session_state["confirm_delete_injection"] = idx
                                 st.rerun()
-                
-                # Show confirmation message
                 if st.session_state["confirm_delete_injection"] == idx:
                     st.warning(f"⚠️ Cliquez sur ✓ pour confirmer la suppression de '{point['nom']}'")
-                
-                # Add separator between rows
                 if idx < len(points) - 1:
                     st.markdown("<hr style='margin: 8px 0; border: 0; border-top: 1px solid #e0e0e0;'>", unsafe_allow_html=True)
+
+            # Formulaire de modification si une ligne est sélectionnée
+            if st.session_state["edit_injection_idx"] is not None and st.session_state["edit_injection_form"] is not None:
+                st.markdown("---")
+                st.subheader("Modifier le point d'injection")
+                edit_state = st.session_state["edit_injection_form"]
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    edit_state["nom"] = st.text_input("Nom *", value=edit_state["nom"], key="edit_nom")
+                    edit_state["type"] = st.selectbox("Type", ["Solaire", "Éolien"], index=["Solaire", "Éolien"].index(edit_state["type"]) if edit_state["type"] in ["Solaire", "Éolien"] else 0, key="edit_type")
+                    segment_options = ["C2", "C3", "C4", "C5"]
+                    edit_state["segment"] = st.selectbox("Segment", segment_options, index=segment_options.index(edit_state["segment"]) if edit_state["segment"] in segment_options else 2, key="edit_segment")
+                with col2:
+                    edit_state["puissance"] = st.number_input("Puissance (kW)", min_value=0, step=1, value=edit_state["puissance"], format="%d", key="edit_puissance")
+                    edit_state["tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("tva", False), key="edit_tva")
+                    edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
+                with col3:
+                    edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_adresse")
+                if st.button("💾 Enregistrer les modifications", key="save_edit_injection", type="primary"):
+                    # Remplacer l'ancien point par le modifié
+                    st.session_state["points_injection"][st.session_state["edit_injection_idx"]] = edit_state.copy()
+                    st.success(f"✅ Point '{edit_state['nom']}' modifié avec succès!")
+                    st.session_state["edit_injection_idx"] = None
+                    st.session_state["edit_injection_form"] = None
+                    st.rerun()
+                if st.button("❌ Annuler", key="cancel_edit_injection"):
+                    st.session_state["edit_injection_idx"] = None
+                    st.session_state["edit_injection_form"] = None
+                    st.rerun()
         else:
             st.info("Aucun point d'injection configuré. Ajoutez-en un ci-dessous.")
 
         st.divider()
 
         # Section 2: Add form (simple form with direct curve display)
-        st.subheader("Ajouter un point d'injection")
-        
-        # Initialize form state if needed
-        if "inj_form_state" not in st.session_state:
-            st.session_state["inj_form_state"] = {
-                "nom": "", "type": "Solaire", "segment": "C4", 
-                "puissance": 0, "apply_tva": False, "valorisation": 0.0,
-                "adresse": "", "source": "Aucune",
-                "curve_data": None, "coords": None, "last_pvgis_params": ""
-            }
-        
-        state = st.session_state["inj_form_state"]
-        
-        # Input form
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Centrale PV Nord")
-            state["type"] = st.selectbox("Type", ["Solaire", "Éolien"], index=["Solaire", "Éolien"].index(state["type"]) if state["type"] in ["Solaire", "Éolien"] else 0)
-            segment_options = ["C2", "C3", "C4", "C5"]
-            state["segment"] = st.selectbox("Segment", segment_options, index=segment_options.index(state["segment"]) if state["segment"] in segment_options else 2)
-        
-        with col2:
-            state["puissance"] = st.number_input("Puissance (kW)", min_value=0, step=1, value=state["puissance"], format="%d")
-            state["apply_tva"] = st.checkbox("Récupération de TVA", value=state["apply_tva"])
-            state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=state["valorisation"], format="%.2f")
-        
-        with col3:
-            state["adresse"] = st.text_input("Adresse *", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris")
-            state["source"] = st.radio("Source de la courbe de production", ["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"], 
-                                       index=["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"].index(state["source"]) if state["source"] in ["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"] else 0)
-        
-        # Handle curve upload/generation based on source
-        st.markdown("**Courbe de production**")
-        
-        # Two-column layout: configuration on left, preview on right
-        col_curve1, col_curve2 = st.columns([1, 1])
-        
-        with col_curve1:
-            if state["source"] == "Téléverser XLS":
-                uploaded_file = st.file_uploader(
-                    "Charger CSV/XLS/XLSX",
-                    type=["csv", "xls", "xlsx"],
-                    key="upload_xls_inj",
+                
+                # Section 2: Add form (simple form with direct curve display)
+        # Masquer le formulaire d'ajout pendant l'édition
+        if st.session_state["edit_injection_idx"] is None:
+            st.subheader("Ajouter un point d'injection")
+
+            # Initialize form state if needed
+            if "inj_form_state" not in st.session_state:
+                st.session_state["inj_form_state"] = {
+                    "nom": "",
+                    "type": "Solaire",
+                    "segment": "C4",
+                    "puissance": 0,
+                    "apply_tva": False,
+                    "valorisation": 0.0,
+                    "adresse": "",
+                    "source": "Aucune",
+                    "curve_data": None,
+                    "coords": None,
+                    "last_pvgis_params": "",
+                }
+
+            state = st.session_state["inj_form_state"]
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Centrale PV Nord")
+                state["type"] = st.selectbox(
+                    "Type",
+                    ["Solaire", "Éolien"],
+                    index=["Solaire", "Éolien"].index(state["type"]) if state["type"] in ["Solaire", "Éolien"] else 0,
                 )
-                if uploaded_file:
-                    try:
-                        name = uploaded_file.name.lower()
-                        if name.endswith(".csv"):
-                            # Use sep=None with python engine for auto-detection of separator (handles ; or ,)
-                            curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
-                            # Clean column names (remove BOM and whitespace)
-                            curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
-                        else:
-                            curve_df = pd.read_excel(uploaded_file)
-                        state["curve_data"] = curve_df
-                        st.success("✅ Fichier chargé")
-                    except Exception as e:
-                        st.error(f"⚠️ Erreur lecture fichier: {e}")
-                        state["curve_data"] = None
-            
-            elif state["source"] == "Modéliser via PVGIS":
-                tilt = st.number_input("Inclinaison (°)", min_value=0.0, max_value=90.0, step=1.0, value=30.0, format="%.0f")
-                azimuth = st.number_input("Azimut (°)", min_value=0.0, max_value=360.0, step=1.0, value=0.0, format="%.0f")
-                losses = st.number_input("Pertes système (%)", min_value=0.0, max_value=50.0, step=0.5, value=14.0, format="%.1f")
-                
-                # Afficher les dates sélectionnées dans Infos Générales
-                start_date = st.session_state.get("start_date")
-                end_date = st.session_state.get("end_date")
-                
-                if start_date and end_date:
-                    duration_days = (end_date - start_date).days
-                    st.info(f"📅 Période configurée : {start_date.strftime('%d/%m/%Y')} → {end_date.strftime('%d/%m/%Y')} ({duration_days} jours)")
-                else:
-                    st.warning("⚠️ Configurez les dates dans 'Infos générales' d'abord")
-                
-                # Détecter les changements de paramètres
-                current_params = f"{state['adresse']}_{state['puissance']}_{tilt}_{azimuth}_{losses}_{start_date}_{end_date}"
-                last_params = state.get("last_pvgis_params", "")
-                
-                if state["curve_data"] is not None and current_params != last_params:
-                    st.warning("⚠️ Les paramètres ont changé. Cliquez sur 'Générer' pour recalculer la courbe.")
-                
-                if st.button("🔄 Générer courbe PVGIS", use_container_width=True):
-                    if not state["nom"] or not state["adresse"] or state["puissance"] <= 0:
-                        st.error("⚠️ Remplissez Nom, Adresse et Puissance d'abord")
-                    elif not start_date or not end_date:
-                        st.error("⚠️ Configurez les dates dans 'Infos générales' d'abord")
-                    elif start_date >= end_date:
-                        st.error("⚠️ La date de début doit être antérieure à la date de fin")
+                segment_options = ["C2", "C3", "C4", "C5"]
+                state["segment"] = st.selectbox(
+                    "Segment",
+                    segment_options,
+                    index=segment_options.index(state["segment"]) if state["segment"] in segment_options else 2,
+                )
+
+            with col2:
+                state["puissance"] = st.number_input(
+                    "Puissance (kW)", min_value=0, step=1, value=int(state["puissance"]), format="%d"
+                )
+                state["apply_tva"] = st.checkbox("Récupération de TVA", value=bool(state["apply_tva"]))
+                state["valorisation"] = st.number_input(
+                    "Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=float(state["valorisation"]), format="%.2f"
+                )
+
+            with col3:
+                state["adresse"] = st.text_input(
+                    "Adresse *", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris"
+                )
+                sources = ["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"]
+                state["source"] = st.radio(
+                    "Source de la courbe de production",
+                    sources,
+                    index=sources.index(state["source"]) if state["source"] in sources else 0,
+                )
+
+            st.markdown("**Courbe de production**")
+            col_curve1, col_curve2 = st.columns([1, 1])
+
+            # -------------------------
+            # Colonne gauche : acquisition de la courbe
+            # -------------------------
+            with col_curve1:
+                if state["source"] == "Téléverser XLS":
+                    uploaded_file = st.file_uploader(
+                        "Charger CSV/XLS/XLSX",
+                        type=["csv", "xls", "xlsx"],
+                        key="upload_xls_inj",
+                    )
+                    if uploaded_file:
+                        try:
+                            name = uploaded_file.name.lower()
+                            if name.endswith(".csv"):
+                                curve_df = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="utf-8-sig")
+                                curve_df.columns = [str(col).strip().lstrip("\ufeff") for col in curve_df.columns]
+                            else:
+                                curve_df = pd.read_excel(uploaded_file)
+
+                            state["curve_data"] = curve_df
+                            st.success("✅ Fichier chargé")
+                        except Exception as e:
+                            st.error(f"⚠️ Erreur lecture fichier: {e}")
+                            state["curve_data"] = None
+
+                elif state["source"] == "Modéliser via PVGIS":
+                    tilt = st.number_input("Inclinaison (°)", min_value=0.0, max_value=90.0, step=1.0, value=30.0, format="%.0f")
+                    azimuth = st.number_input("Azimut (°)", min_value=0.0, max_value=360.0, step=1.0, value=0.0, format="%.0f")
+                    losses = st.number_input("Pertes système (%)", min_value=0.0, max_value=50.0, step=0.5, value=14.0, format="%.1f")
+
+                    start_date = st.session_state.get("start_date")
+                    end_date = st.session_state.get("end_date")
+
+                    if start_date and end_date:
+                        duration_days = (end_date - start_date).days
+                        st.info(f"📅 Période configurée : {start_date.strftime('%d/%m/%Y')} → {end_date.strftime('%d/%m/%Y')} ({duration_days} jours)")
                     else:
-                        with st.spinner("Géolocalisation et génération en cours..."):
-                            coords = get_coordinates_from_address(state["adresse"])
-                            if coords and coords.get("lat") and coords.get("lng"):
-                                state["coords"] = coords
-                                curve = compute_pv_curve(
-                                    lat=coords["lat"],
-                                    lon=coords["lng"],
-                                    peakpower_kw=float(state["puissance"]),
-                                    tilt_deg=float(tilt),
-                                    azimuth_deg=float(azimuth),
-                                    losses_pct=float(losses),
-                                    start_date=start_date,
-                                    end_date=end_date
-                                )
-                                if curve is not None:
-                                    state["curve_data"] = curve
-                                    state["last_pvgis_params"] = f"{state['adresse']}_{state['puissance']}_{tilt}_{azimuth}_{losses}_{start_date}_{end_date}"
-                                    duration_days = (end_date - start_date).days
-                                    st.success(f"✅ Courbe PVGIS générée : {len(curve)} heures ({duration_days} jours)")
+                        st.warning("⚠️ Configurez les dates dans 'Infos générales' d'abord")
+
+                    current_params = f"{state['adresse']}_{state['puissance']}_{tilt}_{azimuth}_{losses}_{start_date}_{end_date}"
+                    last_params = state.get("last_pvgis_params", "")
+
+                    if state["curve_data"] is not None and current_params != last_params:
+                        st.warning("⚠️ Les paramètres ont changé. Cliquez sur 'Générer' pour recalculer la courbe.")
+
+                    if st.button("🔄 Générer courbe PVGIS", use_container_width=True):
+                        if not state["nom"] or not state["adresse"] or state["puissance"] <= 0:
+                            st.error("⚠️ Remplissez Nom, Adresse et Puissance d'abord")
+                        elif not start_date or not end_date:
+                            st.error("⚠️ Configurez les dates dans 'Infos générales' d'abord")
+                        elif start_date >= end_date:
+                            st.error("⚠️ La date de début doit être antérieure à la date de fin")
+                        else:
+                            with st.spinner("Géolocalisation et génération en cours..."):
+                                coords = get_coordinates_from_address(state["adresse"])
+                                if coords and coords.get("lat") and coords.get("lng"):
+                                    state["coords"] = coords
+
+                                    curve = compute_pv_curve(
+                                        lat=coords["lat"],
+                                        lon=coords["lng"],
+                                        peakpower_kw=float(state["puissance"]),
+                                        tilt_deg=float(tilt),
+                                        azimuth_deg=float(azimuth),
+                                        losses_pct=float(losses),
+                                        start_date=start_date,
+                                        end_date=end_date,
+                                    )
+                                    if curve is not None:
+                                        state["curve_data"] = curve
+                                        state["last_pvgis_params"] = current_params
+                                        duration_days = (end_date - start_date).days
+                                        st.success(f"✅ Courbe PVGIS générée : {len(curve)} heures ({duration_days} jours)")
+                                    else:
+                                        st.error("⚠️ Erreur génération courbe PVGIS")
+                                        state["curve_data"] = None
                                 else:
-                                    st.error("⚠️ Erreur génération courbe PVGIS")
+                                    st.error("⚠️ Impossible de géolocaliser l'adresse")
                                     state["curve_data"] = None
-                            else:
-                                st.error("⚠️ Impossible de géolocaliser l'adresse")
-                                state["curve_data"] = None
-                                st.error("⚠️ Impossible de géolocaliser l'adresse")
-                                state["curve_data"] = None
-            
-            elif state["source"] == "📚 Bibliothèque":
-                # List available datasets of type 'production_curve' for the current project
-                project_id = st.session_state.get("project_id")
-                if not project_id:
-                    st.warning("⚠️ Veuillez sauvegarder le projet avant d'accéder à la bibliothèque.")
-                    datasets = []
-                else:
-                    datasets = list_datasets(project_id=project_id, dataset_type="production_curve")
-                
-                if not datasets:
-                    st.info("📂 Aucune courbe sauvegardée dans la bibliothèque.")
-                else:
-                    options = {d['name']: d['id'] for d in datasets}
-                    selected_name = st.selectbox("Choisir un profil sauvegardé", options=["-- Sélectionner --"] + list(options.keys()))
-                    
-                    if selected_name != "-- Sélectionner --":
-                        dataset_id = options[selected_name]
-                        if st.button("📥 Charger ce profil", use_container_width=True):
-                            loaded = load_dataset(dataset_id)
-                            if loaded:
-                                state["curve_data"] = loaded["data"]
-                                st.success(f"✅ Profil '{selected_name}' chargé !")
-                                
-                                # Use metadata to fill other fields if available and empty
-                                meta = loaded.get("metadata", {})
-                                if meta:
-                                    if not state["nom"] and "original_name" in meta:
-                                        state["nom"] = meta["original_name"]
-                            else:
-                                st.error("Erreur lors du chargement du profil.")
-                st.info("Pas de courbe de production pour ce point")
-        
-        with col_curve2:
-            # Display curve preview if available
-            if state["curve_data"] is not None:
-                st.markdown("**📊 Aperçu**")
-                try:
-                    result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
 
-                    if result.get('success') and result.get('df') is not None and len(result['df']) > 0:
-                        norm_df = result['df']
-                        if 'value' in norm_df.columns:
-                            st.line_chart(norm_df['value'], use_container_width=True, height=300)
-                        else:
-                            st.line_chart(norm_df, use_container_width=True, height=300)
-
-                        st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
-
-                        # Calculer le volume produit
-                        if 'value' in norm_df.columns:
-                            volume_total = norm_df['value'].sum()
-                            volume_mwh = volume_total / 1000.0
-                            st.metric("Volume produit estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
-
-                        st.divider()
-                        # Save to Library Button
-                        with st.popover("💾 Sauver en Bibliothèque"):
-                            st.markdown("##### Sauvegarder ce profil")
-                            save_name = st.text_input("Nom du profil", value=state["nom"] if state["nom"] else "Nouveau profil")
-                            if st.button("Confirmer sauvegarde", type="primary", use_container_width=True):
-                                if save_name:
-                                    try:
-                                        # Metadata to help with context
-                                        meta = {
-                                            "source_type": state["source"],
-                                            "original_name": state["nom"],
-                                            "address": state["adresse"],
-                                            "peak_power": state["puissance"]
-                                        }
-                                        project_id = st.session_state.get("project_id")
-                                        if not project_id:
-                                             st.error("⚠️ Projet non identifié. Sauvegardez le projet d'abord.")
-                                        else:
-                                            save_dataset(
-                                                project_id=project_id,
-                                                name=save_name,
-                                                type="production_curve",
-                                                data=state["curve_data"],
-                                                metadata=meta
-                                            )
-                                        st.toast(f"✅ Profil '{save_name}' sauvegardé !")
-                                    except Exception as e:
-                                        st.error(f"Erreur sauvegarde: {e}")
-                                else:
-                                    st.error("Le nom est obligatoire.")
-
+                elif state["source"] == "📚 Bibliothèque":
+                    project_id = st.session_state.get("project_id")
+                    if not project_id:
+                        st.warning("⚠️ Veuillez sauvegarder le projet avant d'accéder à la bibliothèque.")
+                        datasets = []
                     else:
-                        st.warning("⚠️ Courbe non exploitable pour l'affichage.")
-                        if result.get('errors'):
-                            st.error(f"Erreurs: {result['errors']}")
-                        validation = result.get('validation') or {}
-                        if validation.get('errors'):
-                            st.error(f"Validation: {validation['errors']}")
-                except Exception as e:
-                    st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
-            elif state["source"] != "Aucune":
-                st.info("↖️ Configurez et générez/téléversez la courbe pour voir l'aperçu")
-            elif state["source"] != "Aucune":
-                st.info("↖️ Configurez et générez/téléversez la courbe")
-        
-        st.divider()
-        
+                        datasets = list_datasets(project_id=project_id, dataset_type="production_curve")
+
+                    if not datasets:
+                        st.info("📂 Aucune courbe sauvegardée dans la bibliothèque.")
+                    else:
+                        options = {d["name"]: d["id"] for d in datasets}
+                        selected_name = st.selectbox("Choisir un profil sauvegardé", options=["-- Sélectionner --"] + list(options.keys()))
+
+                        if selected_name != "-- Sélectionner --":
+                            dataset_id = options[selected_name]
+                            if st.button("📥 Charger ce profil", use_container_width=True):
+                                loaded = load_dataset(dataset_id)
+                                if loaded:
+                                    state["curve_data"] = loaded.get("data")
+                                    st.success(f"✅ Profil '{selected_name}' chargé !")
+
+                                    meta = loaded.get("metadata", {}) or {}
+                                    if meta and (not state["nom"]) and ("original_name" in meta):
+                                        state["nom"] = meta["original_name"]
+                                else:
+                                    st.error("Erreur lors du chargement du profil.")
+
+                else:
+                    st.info("Pas de courbe de production pour ce point")
+
+            # -------------------------
+            # Colonne droite : aperçu & sauvegarde
+            # -------------------------
+            with col_curve2:
+                if state.get("curve_data") is not None:
+                    st.markdown("**📊 Aperçu**")
+                    try:
+                        result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
+
+                        if result.get("success") and result.get("df") is not None and len(result["df"]) > 0:
+                            norm_df = result["df"]
+
+                            if "value" in norm_df.columns:
+                                st.line_chart(norm_df["value"], use_container_width=True, height=300)
+                            else:
+                                st.line_chart(norm_df, use_container_width=True, height=300)
+
+                            st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
+
+                            if "value" in norm_df.columns:
+                                volume_total = float(norm_df["value"].sum())
+                                volume_mwh = volume_total / 1000.0
+                                st.metric("Volume produit estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
+
+                            st.divider()
+
+                            # Save to Library Button
+                            with st.popover("💾 Sauver en Bibliothèque"):
+                                st.markdown("##### Sauvegarder ce profil")
+                                save_name = st.text_input("Nom du profil", value=state["nom"] if state["nom"] else "Nouveau profil")
+
+                                if st.button("Confirmer sauvegarde", type="primary", use_container_width=True):
+                                    if save_name:
+                                        try:
+                                            meta = {
+                                                "source_type": state["source"],
+                                                "original_name": state["nom"],
+                                                "address": state["adresse"],
+                                                "peak_power": state["puissance"],
+                                            }
+                                            project_id = st.session_state.get("project_id")
+                                            if not project_id:
+                                                st.error("⚠️ Projet non identifié. Sauvegardez le projet d'abord.")
+                                            else:
+                                                save_dataset(
+                                                    project_id=project_id,
+                                                    name=save_name,
+                                                    type="production_curve",
+                                                    data=state["curve_data"],
+                                                    metadata=meta,
+                                                )
+                                                st.toast(f"✅ Profil '{save_name}' sauvegardé !")
+                                        except Exception as e:
+                                            st.error(f"Erreur sauvegarde: {e}")
+                                    else:
+                                        st.error("Le nom est obligatoire.")
+                        else:
+                            st.warning("⚠️ Courbe non exploitable pour l'affichage.")
+                            if result.get("errors"):
+                                st.error(f"Erreurs: {result['errors']}")
+                            validation = result.get("validation") or {}
+                            if validation.get("errors"):
+                                st.error(f"Validation: {validation['errors']}")
+                    except Exception as e:
+                        st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
+                else:
+                    if state.get("source") != "Aucune":
+                        st.info("↖️ Configurez et générez/téléversez la courbe pour voir l'aperçu")
+        else:
+            st.info("✏️ Mode édition actif : le formulaire d'ajout est masqué.")
         # Validation button (always visible)
         col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
         

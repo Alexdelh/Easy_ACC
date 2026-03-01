@@ -179,6 +179,7 @@ def render():
     tab1, tab2 = st.tabs(["📊 Gestion des points", "🗺️ Vérification des contraintes"])
 
     with tab1:
+        
         # Full-width layout: Table + Form (no map)
         st.subheader("Points de soutirage")
         
@@ -189,6 +190,10 @@ def render():
             st.session_state["confirm_delete_soutirage"] = None
         
         # Section 1: Custom HTML table with action buttons
+        if "edit_soutirage_idx" not in st.session_state:
+            st.session_state["edit_soutirage_idx"] = None
+        if "edit_soutirage_form" not in st.session_state:
+            st.session_state["edit_soutirage_form"] = None
         if len(points) > 0:
             # Custom CSS for fixed table layout
             st.markdown("""
@@ -239,44 +244,41 @@ def render():
             
             # Display each point with action buttons
             for idx, point in enumerate(points):
-                # Create columns for data display and action buttons
+                highlight = (st.session_state["edit_soutirage_idx"] == idx)
+                row_style = "background-color:#e3f0ff; color:#1565c0; font-weight:bold; border-radius:6px;" if highlight else ""
                 cols = st.columns([0.16, 0.10, 0.13, 0.14, 0.09, 0.13, 0.11, 0.14])
-                
+
                 with cols[0]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['nom']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['nom']}</div>", unsafe_allow_html=True)
                 with cols[1]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['segment']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[2]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['tarif_reference']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_reference']}</div>", unsafe_allow_html=True)
                 with cols[3]:
                     aci_text = f"Oui ({point['aci_partenaire']})" if point['aci'] else "Non"
-                    st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{aci_text}</div>", unsafe_allow_html=True)
                 with cols[4]:
                     tva_status = "✅" if point.get('tva', False) else "❌"
-                    st.markdown(f"<div style='padding: 4px 0;'>{tva_status}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{tva_status}</div>", unsafe_allow_html=True)
                 with cols[5]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['structure_tarifaire']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['structure_tarifaire']}</div>", unsafe_allow_html=True)
                 with cols[6]:
-                    st.markdown(f"<div style='padding: 4px 0;'>{point['tarif_complement']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_complement']}</div>", unsafe_allow_html=True)
                 with cols[7]:
-                    # Action buttons with emojis
                     action_cols = st.columns([1, 1, 1], gap="small")
-                    
                     with action_cols[0]:
                         if st.button("✏️", key=f"edit_s_{idx}", help="Modifier", use_container_width=True):
-                            st.info("Fonction de modification à venir")
-                    
+                            st.session_state["edit_soutirage_idx"] = idx
+                            st.session_state["edit_soutirage_form"] = point.copy()
+                            st.rerun()
                     with action_cols[1]:
                         if st.button("📋", key=f"dup_s_{idx}", help="Dupliquer", use_container_width=True):
-                            # Duplicate the point
                             duplicated_point = point.copy()
                             duplicated_point["nom"] = f"{point['nom']} (copie)"
                             st.session_state["points_soutirage"].append(duplicated_point)
                             st.success(f"✅ Point '{point['nom']}' dupliqué!")
                             st.rerun()
-                    
                     with action_cols[2]:
-                        # Two-step deletion with confirmation
                         if st.session_state["confirm_delete_soutirage"] == idx:
                             if st.button("✓", key=f"confirm_s_{idx}", help="Confirmer la suppression", use_container_width=True):
                                 st.session_state["points_soutirage"].pop(idx)
@@ -287,121 +289,149 @@ def render():
                             if st.button("🗑️", key=f"delete_s_{idx}", help="Supprimer", use_container_width=True):
                                 st.session_state["confirm_delete_soutirage"] = idx
                                 st.rerun()
-                
-                # Show confirmation message
                 if st.session_state["confirm_delete_soutirage"] == idx:
                     st.warning(f"⚠️ Cliquez sur ✓ pour confirmer la suppression de '{point['nom']}'")
-                
-                # Add separator between rows
                 if idx < len(points) - 1:
                     st.markdown("<hr style='margin: 8px 0; border: 0; border-top: 1px solid #e0e0e0;'>", unsafe_allow_html=True)
+
+            # Afficher le formulaire de modification sous la table si une ligne est sélectionnée
+            if st.session_state["edit_soutirage_idx"] is not None and st.session_state["edit_soutirage_form"] is not None:
+                st.markdown("---")
+                st.subheader("Modifier le point de soutirage")
+                edit_state = st.session_state["edit_soutirage_form"]
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    edit_state["nom"] = st.text_input("Nom *", value=edit_state["nom"], key="edit_sout_nom")
+                    edit_state["segment"] = st.text_input("Segment", value=edit_state["segment"], key="edit_sout_segment")
+                    edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_sout_adresse")
+                with col2:
+                    edit_state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=edit_state["tarif_reference"], format="%.2f", key="edit_sout_tarif_reference")
+                    edit_state["apply_tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("apply_tva", False), key="edit_sout_apply_tva")
+                    edit_state["structure_tarifaire"] = st.selectbox("Structure tarifaire", ["Base", "Heures pleines / Heures creuses", "4 quadrants"], 
+                        index=["Base", "Heures pleines / Heures creuses", "4 quadrants"].index(edit_state["structure_tarifaire"]), key="edit_sout_structure_tarifaire")
+                with col3:
+                    edit_state["aci"] = st.checkbox("Contrat ACI", value=edit_state["aci"], key="edit_sout_aci")
+                    injection_points = st.session_state.get("points_injection", [])
+                    injection_names = [p["nom"] for p in injection_points]
+                    edit_state["aci_partenaire"] = st.selectbox("Partenaire ACI", ["Aucun"] + injection_names, 
+                        index=( ["Aucun"] + injection_names ).index(edit_state["aci_partenaire"] ) if edit_state["aci_partenaire"] in (["Aucun"] + injection_names) else 0,
+                        disabled=not edit_state["aci"], key="edit_sout_aci_partenaire")
+                    edit_state["tarif_complement"] = st.number_input("Tarif de complément (c€/kWh)", min_value=0.0, step=0.01, value=edit_state["tarif_complement"], format="%.2f", key="edit_sout_tarif_complement")
+
+                # Boutons verticaux : Enregistrer puis Annuler en dessous
+                st.markdown("<div style='width: 220px;'>", unsafe_allow_html=True)
+                if st.button("💾 Enregistrer les modifications", key="save_edit_soutirage", type="primary"):
+                    idx = st.session_state["edit_soutirage_idx"]
+                    st.session_state["points_soutirage"][idx] = edit_state.copy()
+                    st.success(f"✅ Point '{edit_state['nom']}' modifié avec succès!")
+                    st.session_state["edit_soutirage_idx"] = None
+                    st.session_state["edit_soutirage_form"] = None
+                    st.rerun()
+                if st.button("❌ Annuler", key="cancel_edit_soutirage"):
+                    st.session_state["edit_soutirage_idx"] = None
+                    st.session_state["edit_soutirage_form"] = None
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.info("✏️ Mode édition actif : le formulaire d'ajout est masqué.")
         else:
             st.info("Aucun point de soutirage configuré. Ajoutez-en un ci-dessous.")
 
         st.divider()
 
         # Section 2: Add form (simple form with direct curve display)
-        st.subheader("Ajouter un point de soutirage")
-        
-        # Initialize form state if needed
-        if "sout_form_state" not in st.session_state:
-            st.session_state["sout_form_state"] = {
-                "nom": "", "segment": "", "tarif_reference": 0.0,
-                "apply_tva": False, "structure_tarifaire": "Base",
-                "aci": False, "aci_partenaire": "Aucun",
-                "tarif_complement": 0.0, "adresse": "",
-                "curve_data": None, "coords": None
-            }
-        
-        state = st.session_state["sout_form_state"]
-        
-        # Input form
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
-            state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
-            state["adresse"] = st.text_input("Adresse *", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
-        
-        with col2:
-            state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_reference"], format="%.2f")
-            state["apply_tva"] = st.checkbox("Récupération de TVA", value=state["apply_tva"])
-            state["structure_tarifaire"] = st.selectbox("Structure tarifaire", ["Base", "Heures pleines / Heures creuses", "4 quadrants"], 
-                                                        index=["Base", "Heures pleines / Heures creuses", "4 quadrants"].index(state["structure_tarifaire"]))
-        
-        with col3:
-            state["aci"] = st.checkbox("Contrat ACI", value=state["aci"])
-            # Get list of injection points for ACI partner dropdown
-            injection_points = st.session_state.get("points_injection", [])
-            injection_names = [p["nom"] for p in injection_points]
-            state["aci_partenaire"] = st.selectbox("Partenaire ACI", ["Aucun"] + injection_names, 
-                                                   index=(["Aucun"] + injection_names).index(state["aci_partenaire"]),
-                                                   disabled=not state["aci"])
-            state["tarif_complement"] = st.number_input("Tarif de complément (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_complement"], format="%.2f")
-        
-        # Curve upload
-        st.markdown("**Courbe de consommation**")
-        
-        # Two-column layout: upload on left, preview on right
-        col_curve1, col_curve2 = st.columns([1, 1])
-        
-        with col_curve1:
-            uploaded_file = st.file_uploader(
-                "Charger CSV/XLS/XLSX",
-                type=["csv", "xls", "xlsx"],
-                key="upload_curve_sout",
-            )
-            if uploaded_file:
-                try:
-                    name = uploaded_file.name.lower()
-                    if name.endswith(".csv"):
-                        # Use sep=None with python engine for auto-detection of separator (handles ; or ,)
-                        curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
-                        # Clean column names (remove BOM and whitespace)
-                        curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
-                    else:
-                        curve_df = pd.read_excel(uploaded_file)
-                    state["curve_data"] = curve_df
-                    st.success("✅ Fichier chargé")
-                except Exception as e:
-                    st.error(f"⚠️ Erreur lecture fichier: {e}")
-                    state["curve_data"] = None
-        
-        with col_curve2:
-            # Display curve preview if available
-            if state["curve_data"] is not None:
-                st.markdown("**📊 Aperçu**")
-                try:
-                    result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
-
-                    if result.get('success') and result.get('df') is not None and len(result['df']) > 0:
-                        norm_df = result['df']
-                        # Plot only the numeric 'value' series if present
-                        if 'value' in norm_df.columns:
-                            st.line_chart(norm_df['value'], use_container_width=True, height=300)
+        # Masquer le formulaire d'ajout pendant l'édition
+        if st.session_state.get("edit_soutirage_idx") is None:
+            st.subheader("Ajouter un point de soutirage")
+            # Initialize form state if needed
+            if "sout_form_state" not in st.session_state:
+                st.session_state["sout_form_state"] = {
+                    "nom": "", "segment": "", "tarif_reference": 0.0,
+                    "apply_tva": False, "structure_tarifaire": "Base",
+                    "aci": False, "aci_partenaire": "Aucun",
+                    "tarif_complement": 0.0, "adresse": "",
+                    "curve_data": None, "coords": None
+                }
+            state = st.session_state["sout_form_state"]
+            # Input form
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
+                state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
+                state["adresse"] = st.text_input("Adresse *", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
+            with col2:
+                state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_reference"], format="%.2f")
+                state["apply_tva"] = st.checkbox("Récupération de TVA", value=state["apply_tva"])
+                state["structure_tarifaire"] = st.selectbox("Structure tarifaire", ["Base", "Heures pleines / Heures creuses", "4 quadrants"], 
+                                                            index=["Base", "Heures pleines / Heures creuses", "4 quadrants"].index(state["structure_tarifaire"]))
+            with col3:
+                state["aci"] = st.checkbox("Contrat ACI", value=state["aci"])
+                # Get list of injection points for ACI partner dropdown
+                injection_points = st.session_state.get("points_injection", [])
+                injection_names = [p["nom"] for p in injection_points]
+                state["aci_partenaire"] = st.selectbox("Partenaire ACI", ["Aucun"] + injection_names, 
+                                                       index=( ["Aucun"] + injection_names ).index(state["aci_partenaire"] ) if state["aci_partenaire"] in (["Aucun"] + injection_names) else 0,
+                                                       disabled=not state["aci"])
+                state["tarif_complement"] = st.number_input("Tarif de complément (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_complement"], format="%.2f")
+            # Curve upload
+            st.markdown("**Courbe de consommation**")
+            # Two-column layout: upload on left, preview on right
+            col_curve1, col_curve2 = st.columns([1, 1])
+            with col_curve1:
+                uploaded_file = st.file_uploader(
+                    "Charger CSV/XLS/XLSX",
+                    type=["csv", "xls", "xlsx"],
+                    key="upload_curve_sout",
+                )
+                if uploaded_file:
+                    try:
+                        name = uploaded_file.name.lower()
+                        if name.endswith(".csv"):
+                            # Use sep=None with python engine for auto-detection of separator (handles ; or ,)
+                            curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
+                            # Clean column names (remove BOM and whitespace)
+                            curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
                         else:
-                            st.line_chart(norm_df, use_container_width=True, height=300)
+                            curve_df = pd.read_excel(uploaded_file)
+                        state["curve_data"] = curve_df
+                        st.success("✅ Fichier chargé")
+                    except Exception as e:
+                        st.error(f"⚠️ Erreur lecture fichier: {e}")
+                        state["curve_data"] = None
+            with col_curve2:
+                # Display curve preview if available
+                if state["curve_data"] is not None:
+                    st.markdown("**📊 Aperçu**")
+                    try:
+                        result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
 
-                        st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
+                        if result.get('success') and result.get('df') is not None and len(result['df']) > 0:
+                            norm_df = result['df']
+                            # Plot only the numeric 'value' series if present
+                            if 'value' in norm_df.columns:
+                                st.line_chart(norm_df['value'], use_container_width=True, height=300)
+                            else:
+                                st.line_chart(norm_df, use_container_width=True, height=300)
 
-                        # Calculer le volume consommé
-                        if 'value' in norm_df.columns:
-                            volume_total = norm_df['value'].sum()
-                            volume_mwh = volume_total / 1000.0
-                            st.metric("Volume consommé estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
-                    else:
-                        st.warning("⚠️ Courbe non exploitable pour l'affichage.")
-                        if result.get('errors'):
-                            st.error(f"Erreurs: {result['errors']}")
-                        validation = result.get('validation') or {}
-                        if validation.get('errors'):
-                            st.error(f"Validation: {validation['errors']}")
-                except Exception as e:
-                    st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
-            else:
-                st.info("↖️ Chargez un fichier pour voir l'aperçu")
-        
-        st.divider()
+                            st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
+
+                            # Calculer le volume consommé
+                            if 'value' in norm_df.columns:
+                                volume_total = norm_df['value'].sum()
+                                volume_mwh = volume_total / 1000.0
+                                st.metric("Volume consommé estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
+                        else:
+                            st.warning("⚠️ Courbe non exploitable pour l'affichage.")
+                            if result.get('errors'):
+                                st.error(f"Erreurs: {result['errors']}")
+                            validation = result.get('validation') or {}
+                            if validation.get('errors'):
+                                st.error(f"Validation: {validation['errors']}")
+                    except Exception as e:
+                        st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
+                else:
+                    st.info("↖️ Chargez un fichier pour voir l'aperçu")
+            
+            st.divider()
         
         # Validation button (always visible)
         col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
