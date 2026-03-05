@@ -252,9 +252,13 @@ def render():
         
         points = st.session_state["points_injection"]
         
-        # Initialize confirmation state if not exists
+        # Initialize form and confirmation states if not exists
         if "confirm_delete_injection" not in st.session_state:
             st.session_state["confirm_delete_injection"] = None
+        if "edit_injection_idx" not in st.session_state:
+            st.session_state["edit_injection_idx"] = None
+        if "edit_injection_form" not in st.session_state:
+            st.session_state["edit_injection_form"] = None
         
         # Section 1: Custom HTML table with action buttons
         if len(points) > 0:
@@ -291,13 +295,14 @@ def render():
             <table class="injection-table">
                 <thead>
                     <tr>
-                        <th style="width: 18%;">Nom</th>
-                        <th style="width: 13%;">Type</th>
-                        <th style="width: 11%;">Segment</th>
-                        <th style="width: 14%;">Puissance (kW)</th>
-                        <th style="width: 11%;">TVA</th>
-                        <th style="width: 18%;">Valorisation (cEUR/kWh)</th>
-                        <th style="width: 15%;">Actions</th>
+                        <th style="width: 8%;">Actif</th>
+                        <th style="width: 15%;">Nom</th>
+                        <th style="width: 10%;">Type</th>
+                        <th style="width: 10%;">Segment</th>
+                        <th style="width: 12%;">Puissance (kW)</th>
+                        <th style="width: 10%;">TVA</th>
+                        <th style="width: 15%;">Valorisation (cEUR/kWh)</th>
+                        <th style="width: 20%;">Actions</th>
                     </tr>
                 </thead>
             </table>
@@ -305,30 +310,43 @@ def render():
             st.markdown(table_html, unsafe_allow_html=True)
             
             # Display each point with action buttons
-            if "edit_injection_idx" not in st.session_state:
-                st.session_state["edit_injection_idx"] = None
-            if "edit_injection_idx" not in st.session_state:
-                st.session_state["edit_injection_idx"] = None
-            if "edit_injection_form" not in st.session_state:
-                st.session_state["edit_injection_form"] = None
             for idx, point in enumerate(points):
                 highlight = (st.session_state["edit_injection_idx"] == idx)
-                row_style = "background-color:#e3f0ff; color:#1565c0; font-weight:bold; border-radius:6px;" if highlight else ""
-                cols = st.columns([0.18, 0.13, 0.11, 0.14, 0.11, 0.18, 0.15])
+                is_active = point.get("active", True)
+                
+                if highlight:
+                    row_style = "background-color:#e3f0ff; color:#1565c0; font-weight:bold; border-radius:6px;"
+                elif not is_active:
+                    row_style = "color:#9e9e9e; text-decoration: line-through; opacity: 0.6;"
+                else:
+                    row_style = ""
+                    
+                cols = st.columns([0.08, 0.15, 0.10, 0.10, 0.12, 0.10, 0.15, 0.20])
                 with cols[0]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['nom']}</div>", unsafe_allow_html=True)
+                    if f"active_inj_{idx}" not in st.session_state:
+                        st.session_state[f"active_inj_{idx}"] = is_active
+                    new_active = st.checkbox("Actif", key=f"active_inj_{idx}", label_visibility="collapsed")
+                    if new_active != is_active:
+                        st.session_state["points_injection"][idx]["active"] = new_active
+                        if st.session_state.get("project_id"):
+                            from services.database import save_project
+                            from services.state_serializer import serialize_state
+                            save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
+                        st.rerun()
                 with cols[1]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['type']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['nom']}</div>", unsafe_allow_html=True)
                 with cols[2]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['type']}</div>", unsafe_allow_html=True)
                 with cols[3]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{int(point['puissance'])}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[4]:
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{int(point['puissance'])}</div>", unsafe_allow_html=True)
+                with cols[5]:
                     tva_status = "✅" if point.get('tva', False) else "❌"
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{tva_status}</div>", unsafe_allow_html=True)
-                with cols[5]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['valorisation']}</div>", unsafe_allow_html=True)
                 with cols[6]:
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['valorisation']}</div>", unsafe_allow_html=True)
+                with cols[7]:
                     action_cols = st.columns([1, 1, 1], gap="small")
                     with action_cols[0]:
                         if st.button("✏️", key=f"edit_{idx}", help="Modifier", use_container_width=True):
@@ -340,6 +358,10 @@ def render():
                             duplicated_point = point.copy()
                             duplicated_point["nom"] = f"{point['nom']} (copie)"
                             st.session_state["points_injection"].append(duplicated_point)
+                            if st.session_state.get("project_id"):
+                                from services.database import save_project
+                                from services.state_serializer import serialize_state
+                                save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
                             st.success(f"✅ Point '{point['nom']}' dupliqué!")
                             st.rerun()
                     with action_cols[2]:
@@ -347,6 +369,10 @@ def render():
                             if st.button("✓", key=f"confirm_{idx}", help="Confirmer la suppression", use_container_width=True):
                                 st.session_state["points_injection"].pop(idx)
                                 st.session_state["confirm_delete_injection"] = None
+                                if st.session_state.get("project_id"):
+                                    from services.database import save_project
+                                    from services.state_serializer import serialize_state
+                                    save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
                                 st.success("Point supprimé")
                                 st.rerun()
                         else:
@@ -376,8 +402,11 @@ def render():
                 with col3:
                     edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_adresse")
                 if st.button("💾 Enregistrer les modifications", key="save_edit_injection", type="primary"):
-                    # Remplacer l'ancien point par le modifié
                     st.session_state["points_injection"][st.session_state["edit_injection_idx"]] = edit_state.copy()
+                    if st.session_state.get("project_id"):
+                        from services.database import save_project
+                        from services.state_serializer import serialize_state
+                        save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
                     st.success(f"✅ Point '{edit_state['nom']}' modifié avec succès!")
                     st.session_state["edit_injection_idx"] = None
                     st.session_state["edit_injection_form"] = None
@@ -444,7 +473,7 @@ def render():
                 state["adresse"] = st.text_input(
                     "Adresse *", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris"
                 )
-                sources = ["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"]
+                sources = ["Aucune", "Téléverser XLS", "Modéliser via PVGIS"]
                 state["source"] = st.radio(
                     "Source de la courbe de production",
                     sources,
@@ -534,36 +563,7 @@ def render():
                                     st.error("⚠️ Impossible de géolocaliser l'adresse")
                                     state["curve_data"] = None
 
-                elif state["source"] == "📚 Bibliothèque":
-                    project_id = st.session_state.get("project_id")
-                    if not project_id:
-                        st.warning("⚠️ Veuillez sauvegarder le projet avant d'accéder à la bibliothèque.")
-                        datasets = []
-                    else:
-                        datasets = list_datasets(project_id=project_id, dataset_type="production_curve")
 
-                    if not datasets:
-                        st.info("📂 Aucune courbe sauvegardée dans la bibliothèque.")
-                    else:
-                        options = {d["name"]: d["id"] for d in datasets}
-                        selected_name = st.selectbox("Choisir un profil sauvegardé", options=["-- Sélectionner --"] + list(options.keys()))
-
-                        if selected_name != "-- Sélectionner --":
-                            dataset_id = options[selected_name]
-                            if st.button("📥 Charger ce profil", use_container_width=True):
-                                loaded = load_dataset(dataset_id)
-                                if loaded:
-                                    state["curve_data"] = loaded.get("data")
-                                    st.success(f"✅ Profil '{selected_name}' chargé !")
-
-                                    meta = loaded.get("metadata", {}) or {}
-                                    if meta and (not state["nom"]) and ("original_name" in meta):
-                                        state["nom"] = meta["original_name"]
-                                else:
-                                    st.error("Erreur lors du chargement du profil.")
-
-                else:
-                    st.info("Pas de courbe de production pour ce point")
 
             # -------------------------
             # Colonne droite : aperçu & sauvegarde
@@ -589,38 +589,7 @@ def render():
                                 volume_mwh = volume_total / 1000.0
                                 st.metric("Volume produit estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
 
-                            st.divider()
 
-                            # Save to Library Button
-                            with st.popover("💾 Sauver en Bibliothèque"):
-                                st.markdown("##### Sauvegarder ce profil")
-                                save_name = st.text_input("Nom du profil", value=state["nom"] if state["nom"] else "Nouveau profil")
-
-                                if st.button("Confirmer sauvegarde", type="primary", use_container_width=True):
-                                    if save_name:
-                                        try:
-                                            meta = {
-                                                "source_type": state["source"],
-                                                "original_name": state["nom"],
-                                                "address": state["adresse"],
-                                                "peak_power": state["puissance"],
-                                            }
-                                            project_id = st.session_state.get("project_id")
-                                            if not project_id:
-                                                st.error("⚠️ Projet non identifié. Sauvegardez le projet d'abord.")
-                                            else:
-                                                save_dataset(
-                                                    project_id=project_id,
-                                                    name=save_name,
-                                                    type="production_curve",
-                                                    data=state["curve_data"],
-                                                    metadata=meta,
-                                                )
-                                                st.toast(f"✅ Profil '{save_name}' sauvegardé !")
-                                        except Exception as e:
-                                            st.error(f"Erreur sauvegarde: {e}")
-                                    else:
-                                        st.error("Le nom est obligatoire.")
                         else:
                             st.warning("⚠️ Courbe non exploitable pour l'affichage.")
                             if result.get("errors"):
@@ -673,6 +642,7 @@ def render():
                             "valorisation": state["valorisation"],
                             "adresse": state["adresse"],
                             "hypothetical": False,
+                            "active": True,
                             "courbe_production": (
                                 {"df": processed.get("df"), "metadata": processed.get("metadata"), "impute_report": processed.get("impute_report")} 
                                 if processed and processed.get("success") else state.get("curve_data")
@@ -681,7 +651,28 @@ def render():
                             "lng": state["coords"]["lng"]
                         }
                         st.session_state["points_injection"].append(new_point)
-                        st.success(f"✅ Point '{state['nom']}' ajouté avec succès!")
+                        
+                        # Auto-save Dataset
+                        project_id = st.session_state.get("project_id")
+                        if project_id and state.get("curve_data") is not None:
+                            try:
+                                save_dataset(
+                                    project_id=project_id,
+                                    name=f"{state['nom']}_curve.json",
+                                    type="production_curve",
+                                    data=state["curve_data"],
+                                    metadata={"source_type": state["source"], "original_name": state["nom"], "address": state["adresse"]},
+                                )
+                            except Exception as e:
+                                st.error(f"⚠️ Erreur sauvegarde auto dataset: {e}")
+                        
+                        # Auto-save Project
+                        if project_id:
+                            from services.database import save_project
+                            from services.state_serializer import serialize_state
+                            save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), project_id)
+                            
+                        st.success(f"✅ Point '{state['nom']}' ajouté et sauvegardé avec succès!")
                         
                         # Reset form state
                         st.session_state["inj_form_state"] = {
@@ -762,37 +753,43 @@ def render():
                     st.error(f"Erreur affichage carte: {e}")
                     st.code(traceback.format_exc())
 
+            st.divider()
+            st.subheader("Aperçu des données retenues (Points Actifs)")
+            st.info("💡 Les points décochés dans l'onglet 'Gestion des points' n'apparaîtront pas ici et seront ignorés lors de la génération du scénario.")
+
+            # --- Création du DataFrame croisé producteurs (datetime en index, noms en colonnes, valeurs = production) ---
+            try:
+                dfs = []
+                for p in points:
+                    if p.get("active", True):
+                        courbe = p.get("courbe_production")
+                        nom = p.get("nom", "Producteur")
+                        if isinstance(courbe, dict) and "df" in courbe:
+                            df = courbe["df"]
+                        elif isinstance(courbe, pd.DataFrame):
+                            df = courbe
+                        else:
+                            continue
+                        
+                        # On prend uniquement les colonnes datetime (index) et value
+                        if not isinstance(df.index, pd.DatetimeIndex):
+                            if "datetime" in df.columns:
+                                df = df.set_index("datetime")
+                        if not isinstance(df.index, pd.DatetimeIndex):
+                            continue
+                        if "value" not in df.columns:
+                            continue
+                        
+                        # On ne garde que la colonne value, et on la renomme par le nom du producteur
+                        dfs.append(df[["value"]].rename(columns={"value": nom}))
+                
+                if dfs:
+                    df_prod = pd.concat(dfs, axis=1)
+                    st.session_state["df_prod"] = df_prod
+                    st.dataframe(df_prod, use_container_width=True)
+                else:
+                    st.warning("⚠️ Aucun point d'injection actif avec des données valides.")
+            except Exception as e:
+                st.error(f"Erreur création DataFrame croisé producteurs : {e}")
 
         # Nettoyage : suppression des st.write() de debug
-
-        # --- Création du DataFrame croisé producteurs (datetime en index, noms en colonnes, valeurs = production) ---
-        try:
-            points = st.session_state.get("points_injection", [])
-            dfs = []
-            for p in points:
-                courbe = p.get("courbe_production")
-                nom = p.get("nom", "Producteur")
-                if isinstance(courbe, dict) and "df" in courbe:
-                    df = courbe["df"]
-                elif isinstance(courbe, pd.DataFrame):
-                    df = courbe
-                else:
-                    continue
-                # On prend uniquement les colonnes datetime (index) et value
-                if not isinstance(df.index, pd.DatetimeIndex):
-                    if "datetime" in df.columns:
-                        df = df.set_index("datetime")
-                if not isinstance(df.index, pd.DatetimeIndex):
-                    continue
-                if "value" not in df.columns:
-                    continue
-                # On ne garde que la colonne value, et on la renomme par le nom du producteur
-                dfs.append(df[["value"]].rename(columns={"value": nom}))
-            if dfs:
-                df_prod = pd.concat(dfs, axis=1)
-                st.session_state["df_prod"] = df_prod
-                st.write("DataFrame croisé producteurs :", df_prod)
-            else:
-                pass  # Aucun DataFrame valide
-        except Exception as e:
-            st.error(f"Erreur création DataFrame croisé producteurs : {e}")
