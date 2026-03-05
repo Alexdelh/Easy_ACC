@@ -28,19 +28,19 @@ def render():
     with col1:
         st.subheader("Configuration du projet")
         
-        st.session_state.setdefault("project_name", "") # Ensure initialized
+        if "_project_name" not in st.session_state:
+            st.session_state["_project_name"] = st.session_state.get("project_name", "")
         st.text_input(
             "Nom de l'opération",
-            value=st.session_state["project_name"],
             key="_project_name",
             on_change=auto_save_general_field,
             args=("project_name", "_project_name")
         )
 
-        st.session_state.setdefault("postal_code", "") # Ensure initialized
+        if "_postal_code" not in st.session_state:
+            st.session_state["_postal_code"] = st.session_state.get("postal_code", "")
         st.text_input(
             "Code postal",
-            value=st.session_state["postal_code"],
             placeholder="Ex: 75001",
             max_chars=5,
             key="_postal_code",
@@ -49,18 +49,15 @@ def render():
         )
 
         # Dynamic index for Distance Constraint
-        if "distance_constraint" not in st.session_state or st.session_state["distance_constraint"] not in DISTANCE_OPTIONS:
-            st.session_state["distance_constraint"] = "2 km"
-
-        try:
-            dist_index = DISTANCE_OPTIONS.index(st.session_state["distance_constraint"])
-        except ValueError:
-            dist_index = 0
-
+        if "_distance_constraint" not in st.session_state:
+            val = st.session_state.get("distance_constraint", "2 km")
+            if val not in DISTANCE_OPTIONS:
+                val = "2 km"
+            st.session_state["_distance_constraint"] = val
+            
         st.selectbox(
             "Distance contrainte",
             DISTANCE_OPTIONS,
-            index=dist_index,
             key="_distance_constraint",
             on_change=auto_save_general_field,
             args=("distance_constraint", "_distance_constraint")
@@ -68,18 +65,15 @@ def render():
 
         # Dynamic index for Operation Type
         OPERATION_TYPES = ["Ouverte", "Patrimoniale"]
-        if "operation_type" not in st.session_state or st.session_state["operation_type"] not in OPERATION_TYPES:
-            st.session_state["operation_type"] = "Ouverte"
-
-        try:
-            op_index = OPERATION_TYPES.index(st.session_state["operation_type"])
-        except ValueError:
-            op_index = 0
+        if "_operation_type" not in st.session_state:
+            val = st.session_state.get("operation_type", "Ouverte")
+            if val not in OPERATION_TYPES:
+                val = "Ouverte"
+            st.session_state["_operation_type"] = val
 
         st.selectbox(
             "Type d'opération",
             OPERATION_TYPES,
-            index=op_index,
             key="_operation_type",
             on_change=auto_save_general_field,
             args=("operation_type", "_operation_type")
@@ -88,11 +82,39 @@ def render():
         st.divider()
         st.subheader("Période d'étude")
         
+        import datetime
+        
+        def _parse_date(val):
+            if isinstance(val, str):
+                try:
+                    return datetime.datetime.strptime(val, "%Y-%m-%d").date()
+                except ValueError:
+                    return None
+            return val
+            
+        # VERY IMPORTANT: If we loaded a completed project, the internal keys
+        # _start_date and _end_date may ALSO exist in state as simple strings.
+        # We must overwrite them with proper objects before date_input checks them.
+        if "_start_date" in st.session_state:
+            st.session_state["_start_date"] = _parse_date(st.session_state.get("_start_date"))
+        if "_end_date" in st.session_state:
+            st.session_state["_end_date"] = _parse_date(st.session_state.get("_end_date"))
+            
+        if "start_date" in st.session_state:
+            start_date_val = _parse_date(st.session_state["start_date"])
+        else:
+            start_date_val = None
+            
+        if "end_date" in st.session_state:
+            end_date_val = _parse_date(st.session_state["end_date"])
+        else:
+            end_date_val = None
+        
         date_col1, date_col2 = st.columns(2)
         with date_col1:
             st.date_input(
                 "Date de début",
-                value=st.session_state.get("start_date"),
+                value=start_date_val,
                 key="_start_date",
                 help="Date de début pour la modélisation PVGIS et l'import des courbes",
                 on_change=auto_save_general_field,
@@ -102,7 +124,7 @@ def render():
         with date_col2:
             st.date_input(
                 "Date de fin",
-                value=st.session_state.get("end_date"),
+                value=end_date_val,
                 key="_end_date",
                 help="Date de fin pour la modélisation PVGIS et l'import des courbes",
                 on_change=auto_save_general_field,
