@@ -345,9 +345,91 @@ def render():
                         disabled=not edit_state["aci"], key="edit_sout_aci_partenaire")
                     edit_state["tarif_complement"] = st.number_input("Tarif de complément (c€/kWh)", min_value=0.0, step=0.01, value=edit_state["tarif_complement"], format="%.2f", key="edit_sout_tarif_complement")
 
+                # --- Gestion de la courbe de consommation dans l'édition ---
+                st.markdown("---")
+                st.markdown("**Courbe de consommation**")
+                
+                # Extract the actual dataframe or data dictionary from the 'courbe_consommation' wrapper structure if it exists
+                current_curve_source = edit_state.get("courbe_consommation")
+                has_curve = current_curve_source is not None
+                
+                if has_curve:
+                    st.success("✅ Une courbe est actuellement attachée à ce point.")
+                    
+                    df_to_show = None
+                    if isinstance(current_curve_source, dict) and "df" in current_curve_source:
+                        df_to_show = current_curve_source["df"]
+                    elif isinstance(current_curve_source, pd.DataFrame):
+                        df_to_show = current_curve_source
+                        
+                    if df_to_show is not None and not df_to_show.empty:
+                        # Display a small preview of the current curve
+                        if "value" in df_to_show.columns:
+                            st.line_chart(df_to_show["value"], height=200, use_container_width=True)
+                        else:
+                            st.line_chart(df_to_show, height=200, use_container_width=True)
+                    
+                    if st.button("🗑️ Supprimer et remplacer cette courbe", key="delete_curve_consommation"):
+                        # Remove the curve to expose the uploader
+                        edit_state["courbe_consommation"] = None
+                        edit_state["curve_data"] = None 
+                        st.session_state["points_soutirage"][st.session_state["edit_soutirage_idx"]] = edit_state
+                        st.rerun()
+                else:
+                    # Provide the uploader logic exactly as in the add section if no curve is present
+                    st.info("Aucune courbe actuelle. Téléversez-en une nouvelle ci-dessous.")
+                    uploaded_file = st.file_uploader("Charger CSV/XLS/XLSX", type=["csv", "xls", "xlsx"], key="edit_upload_curve_sout")
+                    if uploaded_file:
+                        try:
+                            name = uploaded_file.name.lower()
+                            if name.endswith(".csv"):
+                                curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
+                                curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
+                            else:
+                                curve_df = pd.read_excel(uploaded_file)
+                            edit_state["curve_data"] = curve_df
+                            st.success("✅ Fichier chargé, prêt à être enregistré.")
+                        except Exception as e:
+                            st.error(f"⚠️ Erreur lecture fichier: {e}")
+                            edit_state["curve_data"] = None
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
                 # Boutons verticaux : Enregistrer puis Annuler en dessous
                 st.markdown("<div style='width: 220px;'>", unsafe_allow_html=True)
                 if st.button("💾 Enregistrer les modifications", key="save_edit_soutirage", type="primary"):
+                    # If we added a new curve_data in the edit form, process it and replace the formal wrapper
+                    if not has_curve and edit_state.get("curve_data") is not None:
+                        processed = None
+                        try:
+                            processed = process_curve(edit_state["curve_data"])
+                        except Exception as e:
+                            st.error(f"Erreur traitement: {e}")
+                        
+                        edit_state["courbe_consommation"] = (
+                            {"df": processed.get("df"), "metadata": processed.get("metadata"), "impute_report": processed.get("impute_report")}
+                            if processed and processed.get("success") else edit_state["curve_data"]
+                        )
+                        
+                        # Trigger db auto-save for the raw dataset if attached to a project
+                        project_id = st.session_state.get("project_id")
+                        if project_id:
+                            try:
+                                from services.database import save_dataset
+                                save_dataset(
+                                    project_id=project_id,
+                                    name=f"{edit_state['nom']}_curve.json",
+                                    type="consumption_curve",
+                                    data=edit_state["curve_data"],
+                                    metadata={"original_name": edit_state["nom"], "address": edit_state["adresse"]},
+                                )
+                            except Exception as e:
+                                st.error(f"Erreur DB dataset: {e}")
+                    
+                    # Ensure we drop the raw curve_data key from st.session_state representation
+                    if "curve_data" in edit_state:
+                         del edit_state["curve_data"]
+                         
                     idx = st.session_state["edit_soutirage_idx"]
                     st.session_state["points_soutirage"][idx] = edit_state.copy()
                     if st.session_state.get("project_id"):

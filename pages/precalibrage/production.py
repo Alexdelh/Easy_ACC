@@ -401,7 +401,129 @@ def render():
                     edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
                 with col3:
                     edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_adresse")
-                if st.button("💾 Enregistrer les modifications", key="save_edit_injection", type="primary"):
+                
+                # --- Gestion de la courbe de production dans l'édition ---
+                st.markdown("---")
+                st.markdown("**Courbe de production**")
+                
+                # Extract the actual dataframe or data dictionary from the 'courbe_production' wrapper structure if it exists
+                current_curve_source = edit_state.get("courbe_production")
+                has_curve = current_curve_source is not None
+                
+                if has_curve:
+                    st.success("✅ Une courbe est actuellement attachée à ce point.")
+                    
+                    df_to_show = None
+                    if isinstance(current_curve_source, dict) and "df" in current_curve_source:
+                        df_to_show = current_curve_source["df"]
+                    elif isinstance(current_curve_source, pd.DataFrame):
+                        df_to_show = current_curve_source
+                        
+                    if df_to_show is not None and not df_to_show.empty:
+                        # Display a small preview of the current curve
+                        if "value" in df_to_show.columns:
+                            st.line_chart(df_to_show["value"], height=200, use_container_width=True)
+                        else:
+                            st.line_chart(df_to_show, height=200, use_container_width=True)
+                    
+                    if st.button("🗑️ Supprimer et remplacer cette courbe", key="delete_curve_injection"):
+                        # Remove the curve to expose the uploader
+                        edit_state["courbe_production"] = None
+                        edit_state["curve_data"] = None 
+                        st.session_state["points_injection"][st.session_state["edit_injection_idx"]] = edit_state
+                        st.rerun()
+                else:
+                    # Provide the uploader logic exactly as in the add section if no curve is present
+                    sources = ["Aucune", "Téléverser XLS", "Modéliser via PVGIS"]
+                    # If editing, we might need a distinct state for the edit form's upload selections
+                    edit_source = st.radio("Source de la nouvelle courbe", sources, index=0, key="edit_source_radio")
+                    
+                    if edit_source == "Téléverser XLS":
+                        uploaded_file = st.file_uploader("Charger CSV/XLS/XLSX", type=["csv", "xls", "xlsx"], key="edit_upload_xls")
+                        if uploaded_file:
+                            try:
+                                name = uploaded_file.name.lower()
+                                if name.endswith(".csv"):
+                                    curve_df = pd.read_csv(uploaded_file, sep=None, engine="python", encoding="utf-8-sig")
+                                    curve_df.columns = [str(col).strip().lstrip("\ufeff") for col in curve_df.columns]
+                                else:
+                                    curve_df = pd.read_excel(uploaded_file)
+                                edit_state["curve_data"] = curve_df
+                                st.success("✅ Fichier chargé, prêt à être enregistré.")
+                            except Exception as e:
+                                st.error(f"⚠️ Erreur lecture fichier: {e}")
+                                edit_state["curve_data"] = None
+                                
+                    elif edit_source == "Modéliser via PVGIS":
+                        col_pv1, col_pv2, col_pv3 = st.columns(3)
+                        with col_pv1:
+                            tilt = st.number_input("Inclinaison (°)", min_value=0.0, max_value=90.0, step=1.0, value=30.0, format="%.0f", key="edit_pv_tilt")
+                        with col_pv2:
+                            azimuth = st.number_input("Azimut (°)", min_value=0.0, max_value=360.0, step=1.0, value=0.0, format="%.0f", key="edit_pv_az")
+                        with col_pv3:
+                            losses = st.number_input("Pertes système (%)", min_value=0.0, max_value=50.0, step=0.5, value=14.0, format="%.1f", key="edit_pv_loss")
+                            
+                        # Need dates
+                        start_date = st.session_state.get("start_date")
+                        end_date = st.session_state.get("end_date")
+                        
+                        if st.button("� Générer courbe PVGIS", key="edit_gen_pv", use_container_width=True):
+                            if not edit_state["nom"] or not edit_state["adresse"] or edit_state["puissance"] <= 0:
+                                st.error("⚠️ Remplissez Nom, Adresse et Puissance d'abord")
+                            elif not start_date or not end_date:
+                                st.error("⚠️ Configurez les dates dans 'Infos générales' d'abord")
+                            else:
+                                with st.spinner("Génération..."):
+                                    coords = get_coordinates_from_address(edit_state["adresse"])
+                                    if coords:
+                                        curve = compute_pv_curve(
+                                            lat=coords["lat"], lon=coords["lng"], peakpower_kw=float(edit_state["puissance"]),
+                                            tilt_deg=float(tilt), azimuth_deg=float(azimuth), losses_pct=float(losses),
+                                            start_date=start_date, end_date=end_date
+                                        )
+                                        if curve is not None:
+                                            edit_state["curve_data"] = curve
+                                            st.success("✅ Courbe PVGIS générée, prête à être enregistrée.")
+                                        else:
+                                            st.error("⚠️ Erreur PVGIS")
+                                    else:
+                                        st.error("⚠️ Impossible de géolocaliser")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- Boutons Enregistrer et Annuler ---
+                if st.button("�💾 Enregistrer les modifications", key="save_edit_injection", type="primary"):
+                    # If we added a new curve_data in the edit form, process it and replace the formal wrapper
+                    if not has_curve and edit_state.get("curve_data") is not None:
+                        processed = None
+                        try:
+                            processed = process_curve(edit_state["curve_data"])
+                        except Exception as e:
+                            st.error(f"Erreur traitement: {e}")
+                        
+                        edit_state["courbe_production"] = (
+                            {"df": processed.get("df"), "metadata": processed.get("metadata"), "impute_report": processed.get("impute_report")}
+                            if processed and processed.get("success") else edit_state["curve_data"]
+                        )
+                        
+                        # Trigger db auto-save for the raw dataset if attached to a project
+                        project_id = st.session_state.get("project_id")
+                        if project_id:
+                            try:
+                                save_dataset(
+                                    project_id=project_id,
+                                    name=f"{edit_state['nom']}_curve.json",
+                                    type="production_curve",
+                                    data=edit_state["curve_data"],
+                                    metadata={"source_type": edit_source, "original_name": edit_state["nom"], "address": edit_state["adresse"]},
+                                )
+                            except Exception as e:
+                                st.error(f"Erreur DB dataset: {e}")
+                    
+                    # Ensure we drop the raw curve_data key from st.session_state representation
+                    if "curve_data" in edit_state:
+                         del edit_state["curve_data"]
+                         
                     st.session_state["points_injection"][st.session_state["edit_injection_idx"]] = edit_state.copy()
                     if st.session_state.get("project_id"):
                         from services.database import save_project
