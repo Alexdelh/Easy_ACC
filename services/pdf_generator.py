@@ -116,5 +116,6 @@ def generate_bilan_pdf(
         pdf.image(line_c_path, x=10, w=180)
 
         # Build byte array of PDF
-        pdf_bytes = pdf.output(dest='S')
+        pdf_string = pdf.output(dest='S')
+        pdf_bytes = pdf_string.encode('latin1')
         return pdf_bytes
