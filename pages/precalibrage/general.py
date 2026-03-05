@@ -5,6 +5,19 @@ from streamlit_folium import st_folium
 from utils.helpers import DISTANCE_OPTIONS, get_coordinates_from_postal_code
 
 
+def auto_save_general_field(state_key, widget_key):
+    if widget_key in st.session_state:
+        st.session_state[state_key] = st.session_state[widget_key]
+    if st.session_state.get("project_id"):
+        from services.database import save_project
+        from services.state_serializer import serialize_state
+        save_project(
+            st.session_state.get("project_name", "Sans titre"), 
+            "precalibrage", 
+            serialize_state(dict(st.session_state)), 
+            st.session_state["project_id"]
+        )
+
 def render():
     """Render the Infos Générales page."""
     st.title("Infos générales")
@@ -15,72 +28,112 @@ def render():
     with col1:
         st.subheader("Configuration du projet")
         
-        st.session_state.setdefault("project_name", "") # Ensure initialized
-        project_name = st.text_input(
+        if "_project_name" not in st.session_state:
+            st.session_state["_project_name"] = st.session_state.get("project_name", "")
+        st.text_input(
             "Nom de l'opération",
-            value=st.session_state["project_name"],
+            key="_project_name",
+            on_change=auto_save_general_field,
+            args=("project_name", "_project_name")
         )
-        st.session_state["project_name"] = project_name
 
-        st.session_state.setdefault("postal_code", "") # Ensure initialized
-        postal_code = st.text_input(
+        if "_postal_code" not in st.session_state:
+            st.session_state["_postal_code"] = st.session_state.get("postal_code", "")
+        st.text_input(
             "Code postal",
-            value=st.session_state["postal_code"],
             placeholder="Ex: 75001",
-            max_chars=5
+            max_chars=5,
+            key="_postal_code",
+            on_change=auto_save_general_field,
+            args=("postal_code", "_postal_code")
         )
-        st.session_state["postal_code"] = postal_code
 
         # Dynamic index for Distance Constraint
-        current_distance = st.session_state.get("distance_constraint", "2 km")
-        try:
-            dist_index = DISTANCE_OPTIONS.index(current_distance)
-        except ValueError:
-            dist_index = 0
-
-        distance_constraint = st.selectbox(
+        if "_distance_constraint" not in st.session_state:
+            val = st.session_state.get("distance_constraint", "2 km")
+            if val not in DISTANCE_OPTIONS:
+                val = "2 km"
+            st.session_state["_distance_constraint"] = val
+            
+        st.selectbox(
             "Distance contrainte",
             DISTANCE_OPTIONS,
-            index=dist_index,
+            key="_distance_constraint",
+            on_change=auto_save_general_field,
+            args=("distance_constraint", "_distance_constraint")
         )
-        st.session_state["distance_constraint"] = distance_constraint
 
         # Dynamic index for Operation Type
         OPERATION_TYPES = ["Ouverte", "Patrimoniale"]
-        current_op_type = st.session_state.get("operation_type", "Ouverte")
-        try:
-            op_index = OPERATION_TYPES.index(current_op_type)
-        except ValueError:
-            op_index = 0
+        if "_operation_type" not in st.session_state:
+            val = st.session_state.get("operation_type", "Ouverte")
+            if val not in OPERATION_TYPES:
+                val = "Ouverte"
+            st.session_state["_operation_type"] = val
 
-        operation_type = st.selectbox(
+        st.selectbox(
             "Type d'opération",
             OPERATION_TYPES,
-            index=op_index,
+            key="_operation_type",
+            on_change=auto_save_general_field,
+            args=("operation_type", "_operation_type")
         )
-        st.session_state["operation_type"] = operation_type
         
         st.divider()
         st.subheader("Période d'étude")
         
+        import datetime
+        
+        def _parse_date(val):
+            if isinstance(val, str):
+                try:
+                    return datetime.datetime.strptime(val, "%Y-%m-%d").date()
+                except ValueError:
+                    return None
+            return val
+            
+        # VERY IMPORTANT: If we loaded a completed project, the internal keys
+        # _start_date and _end_date may ALSO exist in state as simple strings.
+        # We must overwrite them with proper objects before date_input checks them.
+        if "_start_date" in st.session_state:
+            st.session_state["_start_date"] = _parse_date(st.session_state.get("_start_date"))
+        if "_end_date" in st.session_state:
+            st.session_state["_end_date"] = _parse_date(st.session_state.get("_end_date"))
+            
+        if "start_date" in st.session_state:
+            start_date_val = _parse_date(st.session_state["start_date"])
+        else:
+            start_date_val = None
+            
+        if "end_date" in st.session_state:
+            end_date_val = _parse_date(st.session_state["end_date"])
+        else:
+            end_date_val = None
+        
         date_col1, date_col2 = st.columns(2)
         with date_col1:
-            start_date = st.date_input(
+            st.date_input(
                 "Date de début",
-                value=st.session_state.get("start_date"),
-                help="Date de début pour la modélisation PVGIS et l'import des courbes"
+                value=start_date_val,
+                key="_start_date",
+                help="Date de début pour la modélisation PVGIS et l'import des courbes",
+                on_change=auto_save_general_field,
+                args=("start_date", "_start_date")
             )
-            st.session_state["start_date"] = start_date
         
         with date_col2:
-            end_date = st.date_input(
+            st.date_input(
                 "Date de fin",
-                value=st.session_state.get("end_date"),
-                help="Date de fin pour la modélisation PVGIS et l'import des courbes"
+                value=end_date_val,
+                key="_end_date",
+                help="Date de fin pour la modélisation PVGIS et l'import des courbes",
+                on_change=auto_save_general_field,
+                args=("end_date", "_end_date")
             )
-            st.session_state["end_date"] = end_date
         
         # Validation des dates
+        start_date = st.session_state.get("start_date")
+        end_date = st.session_state.get("end_date")
         if start_date and end_date:
             if start_date >= end_date:
                 st.error("⚠️ La date de début doit être antérieure à la date de fin")

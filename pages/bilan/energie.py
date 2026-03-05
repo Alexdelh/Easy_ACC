@@ -411,17 +411,23 @@ def render():
     surplus_dict, auto_dict, compl_dict, conso_df, prod_df = compute_metrics(df_prod, df_conso, mode)
     
     # Donuts de valeurs totales
+    import math
+    def safe_round(v):
+        if v is None or math.isnan(v):
+            return 0
+        return round(v)
+
     surplus_labels = list(surplus_dict.keys())
-    surplus_values = [round(v) for v in surplus_dict.values()]
-    auto_total = sum(auto_dict.values())
-    compl_total = sum(compl_dict.values())
+    surplus_values = [safe_round(v) for v in surplus_dict.values()]
+    auto_total = sum(safe_round(v) for v in auto_dict.values())
+    compl_total = sum(safe_round(v) for v in compl_dict.values())
     
     conso_labels = ["Autoproduction partagée", "Fourniture de complément"]
-    conso_values = [round(auto_total), round(compl_total)]
+    conso_values = [auto_total, compl_total]
 
-    surplus_total = sum(surplus_dict.values())
+    surplus_total = sum(safe_round(v) for v in surplus_dict.values())
     acc_labels = ["Surplus de production", "Autoconsommation totale"]
-    acc_values = [round(surplus_total), round(auto_total)]
+    acc_values = [surplus_total, auto_total]
 
     st.markdown("<br><br>", unsafe_allow_html=True)
 
