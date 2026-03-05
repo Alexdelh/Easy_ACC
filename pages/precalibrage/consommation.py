@@ -228,43 +228,60 @@ def render():
             <table class="soutirage-table">
                 <thead>
                     <tr>
-                        <th style="width: 16%;">Nom</th>
+                        <th style="width: 8%;">Actif</th>
+                        <th style="width: 15%;">Nom</th>
                         <th style="width: 10%;">Segment</th>
-                        <th style="width: 13%;">Tarif réf. (c€/kWh)</th>
-                        <th style="width: 14%;">ACI</th>
-                        <th style="width: 9%;">TVA</th>
-                        <th style="width: 13%;">Structure tarifaire</th>
-                        <th style="width: 11%;">Tarif complément</th>
-                        <th style="width: 14%;">Actions</th>
+                        <th style="width: 11%;">Tarif réf. (c€)</th>
+                        <th style="width: 10%;">ACI</th>
+                        <th style="width: 8%;">TVA</th>
+                        <th style="width: 11%;">Structure</th>
+                        <th style="width: 12%;">Tarif comp.</th>
+                        <th style="width: 15%;">Actions</th>
                     </tr>
                 </thead>
             </table>
             """
             st.markdown(table_html, unsafe_allow_html=True)
             
-            # Display each point with action buttons
             for idx, point in enumerate(points):
                 highlight = (st.session_state["edit_soutirage_idx"] == idx)
-                row_style = "background-color:#e3f0ff; color:#1565c0; font-weight:bold; border-radius:6px;" if highlight else ""
-                cols = st.columns([0.16, 0.10, 0.13, 0.14, 0.09, 0.13, 0.11, 0.14])
+                is_active = point.get("active", True)
+                
+                if highlight:
+                    row_style = "background-color:#e3f0ff; color:#1565c0; font-weight:bold; border-radius:6px;"
+                elif not is_active:
+                    row_style = "color:#9e9e9e; text-decoration: line-through; opacity: 0.6;"
+                else:
+                    row_style = ""
+                    
+                cols = st.columns([0.08, 0.15, 0.10, 0.11, 0.10, 0.08, 0.11, 0.12, 0.15])
 
                 with cols[0]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['nom']}</div>", unsafe_allow_html=True)
+                    if f"active_sout_{idx}" not in st.session_state:
+                         st.session_state[f"active_sout_{idx}"] = is_active
+                    new_active = st.checkbox("Actif", key=f"active_sout_{idx}", label_visibility="collapsed")
+                    if new_active != is_active:
+                        st.session_state["points_soutirage"][idx]["active"] = new_active
+                        if st.session_state.get("project_id"):
+                            from services.database import save_project
+                            from services.state_serializer import serialize_state
+                            save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
+                        st.rerun()
                 with cols[1]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['nom']}</div>", unsafe_allow_html=True)
                 with cols[2]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_reference']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[3]:
                     aci_text = f" {point['aci_partenaire']}" if point['aci'] else "❌"
                     st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
                 with cols[4]:
                     tva_status = "✅" if point.get('tva', False) else "❌"
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{tva_status}</div>", unsafe_allow_html=True)
-                with cols[5]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['structure_tarifaire']}</div>", unsafe_allow_html=True)
                 with cols[6]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_complement']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['structure_tarifaire']}</div>", unsafe_allow_html=True)
                 with cols[7]:
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_complement']}</div>", unsafe_allow_html=True)
+                with cols[8]:
                     action_cols = st.columns([1, 1, 1], gap="small")
                     with action_cols[0]:
                         if st.button("✏️", key=f"edit_s_{idx}", help="Modifier", use_container_width=True):
@@ -276,6 +293,10 @@ def render():
                             duplicated_point = point.copy()
                             duplicated_point["nom"] = f"{point['nom']} (copie)"
                             st.session_state["points_soutirage"].append(duplicated_point)
+                            if st.session_state.get("project_id"):
+                                from services.database import save_project
+                                from services.state_serializer import serialize_state
+                                save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
                             st.success(f"✅ Point '{point['nom']}' dupliqué!")
                             st.rerun()
                     with action_cols[2]:
@@ -283,6 +304,10 @@ def render():
                             if st.button("✓", key=f"confirm_s_{idx}", help="Confirmer la suppression", use_container_width=True):
                                 st.session_state["points_soutirage"].pop(idx)
                                 st.session_state["confirm_delete_soutirage"] = None
+                                if st.session_state.get("project_id"):
+                                    from services.database import save_project
+                                    from services.state_serializer import serialize_state
+                                    save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
                                 st.success("Point supprimé")
                                 st.rerun()
                         else:
@@ -323,6 +348,10 @@ def render():
                 if st.button("💾 Enregistrer les modifications", key="save_edit_soutirage", type="primary"):
                     idx = st.session_state["edit_soutirage_idx"]
                     st.session_state["points_soutirage"][idx] = edit_state.copy()
+                    if st.session_state.get("project_id"):
+                        from services.database import save_project
+                        from services.state_serializer import serialize_state
+                        save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
                     st.success(f"✅ Point '{edit_state['nom']}' modifié avec succès!")
                     st.session_state["edit_soutirage_idx"] = None
                     st.session_state["edit_soutirage_form"] = None
@@ -542,6 +571,7 @@ def render():
                             "structure_tarifaire": state["structure_tarifaire"],
                             "tarif_complement": state["tarif_complement"],
                             "adresse": state["adresse"],
+                            "active": True,
                             # Store either raw df or processed dict; processed preferred
                             "courbe_consommation": (
                                 {"df": processed.get("df"), "metadata": processed.get("metadata"), "impute_report": processed.get("impute_report")} 
@@ -551,7 +581,29 @@ def render():
                             "lng": state["coords"]["lng"]
                         }
                         st.session_state["points_soutirage"].append(new_point)
-                        st.success(f"✅ Point '{state['nom']}' ajouté avec succès!")
+                        
+                        # Auto-save Dataset
+                        project_id = st.session_state.get("project_id")
+                        if project_id and state.get("curve_data") is not None:
+                            try:
+                                from services.database import save_dataset
+                                save_dataset(
+                                    project_id=project_id,
+                                    name=f"{state['nom']}_curve.json",
+                                    type="consumption_curve",
+                                    data=state["curve_data"],
+                                    metadata={"original_name": state["nom"], "address": state["adresse"]},
+                                )
+                            except Exception as e:
+                                st.error(f"⚠️ Erreur sauvegarde auto dataset: {e}")
+                        
+                        # Auto-save Project
+                        if project_id:
+                            from services.database import save_project
+                            from services.state_serializer import serialize_state
+                            save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), project_id)
+                        
+                        st.success(f"✅ Point '{state['nom']}' ajouté et sauvegardé avec succès!")
                         
                         # Reset form state
                         st.session_state["sout_form_state"] = {
@@ -649,36 +701,43 @@ def render():
                     st.error(f"Erreur affichage carte: {e}")
                     st.code(traceback.format_exc())
 
-        # Nettoyage : suppression des st.write() de debug
-
-        # --- Création du DataFrame croisé consommateurs (datetime en index, noms en colonnes, valeurs = consommation) ---
-        try:
-            points = st.session_state.get("points_soutirage", [])
-            dfs = []
-            for p in points:
-                courbe = p.get("courbe_consommation")
-                nom = p.get("nom", "Consommateur")
-                if isinstance(courbe, dict) and "df" in courbe:
-                    df = courbe["df"]
-                elif isinstance(courbe, pd.DataFrame):
-                    df = courbe
+            st.divider()
+            st.subheader("Aperçu des données retenues (Points Actifs)")
+            st.info("💡 Les points décochés dans l'onglet 'Gestion des points' n'apparaîtront pas ici et seront ignorés lors de la génération du scénario.")
+            
+            # --- Création du DataFrame croisé consommateurs (datetime en index, noms en colonnes, valeurs = consommation) ---
+            try:
+                dfs = []
+                for p in points_soutirage:
+                    if p.get("active", True):
+                        courbe = p.get("courbe_consommation")
+                        nom = p.get("nom", "Consommateur")
+                        if isinstance(courbe, dict) and "df" in courbe:
+                            df = courbe["df"]
+                        elif isinstance(courbe, pd.DataFrame):
+                            df = courbe
+                        else:
+                            continue
+                        
+                        # On prend uniquement les colonnes datetime (index) et value
+                        if not isinstance(df.index, pd.DatetimeIndex):
+                            if "datetime" in df.columns:
+                                df = df.set_index("datetime")
+                        if not isinstance(df.index, pd.DatetimeIndex):
+                            continue
+                        if "value" not in df.columns:
+                            continue
+                        
+                        # On ne garde que la colonne value, et on la renomme par le nom du consommateur
+                        dfs.append(df[["value"]].rename(columns={"value": nom}))
+                
+                if dfs:
+                    df_conso = pd.concat(dfs, axis=1)
+                    st.session_state["df_conso"] = df_conso
+                    st.dataframe(df_conso, use_container_width=True)
                 else:
-                    continue
-                # On prend uniquement les colonnes datetime (index) et value
-                if not isinstance(df.index, pd.DatetimeIndex):
-                    if "datetime" in df.columns:
-                        df = df.set_index("datetime")
-                if not isinstance(df.index, pd.DatetimeIndex):
-                    continue
-                if "value" not in df.columns:
-                    continue
-                # On ne garde que la colonne value, et on la renomme par le nom du consommateur
-                dfs.append(df[["value"]].rename(columns={"value": nom}))
-            if dfs:
-                df_conso = pd.concat(dfs, axis=1)
-                st.session_state["df_conso"] = df_conso
-                st.write("DataFrame croisé consommateurs :", df_conso)
-            else:
-                pass  # Aucun DataFrame valide
-        except Exception as e:
-            st.error(f"Erreur création DataFrame croisé consommateurs : {e}")
+                    st.warning("⚠️ Aucun point de soutirage actif avec des données valides.")
+            except Exception as e:
+                st.error(f"Erreur création DataFrame croisé consommateurs : {e}")
+
+        # Nettoyage : suppression des st.write() de debug
