@@ -108,10 +108,22 @@ def render():
                         st.error(f"Erreur: {e}")
                 
                 # Delete
-                if col_act2.button("🗑️", key=f"del_{p['id']}", help="Supprimer", use_container_width=True):
-                    delete_project(p['id'])
-                    st.toast("Projet supprimé")
-                    time.sleep(0.5)
-                    st.rerun()
+                if "confirm_delete_project" not in st.session_state:
+                    st.session_state["confirm_delete_project"] = None
+                    
+                if st.session_state["confirm_delete_project"] == p['id']:
+                    if col_act2.button("✓", key=f"confirm_{p['id']}", help="Confirmer", use_container_width=True):
+                        delete_project(p['id'])
+                        st.session_state["confirm_delete_project"] = None
+                        st.toast("Projet supprimé")
+                        time.sleep(0.5)
+                        st.rerun()
+                else:
+                    if col_act2.button("🗑️", key=f"del_{p['id']}", help="Supprimer", use_container_width=True):
+                        st.session_state["confirm_delete_project"] = p['id']
+                        st.rerun()
+            
+            if st.session_state.get("confirm_delete_project") == p['id']:
+                st.warning("⚠️ Confirmez pour supprimer ✓ (Toutes les données du projet seront perdues)")
             
             st.markdown("<hr style='margin: 5px 0; opacity: 0.1;'>", unsafe_allow_html=True)
