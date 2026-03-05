@@ -112,18 +112,27 @@ def render():
                     st.session_state["confirm_delete_project"] = None
                     
                 if st.session_state["confirm_delete_project"] == p['id']:
-                    if col_act2.button("✓", key=f"confirm_{p['id']}", help="Confirmer", use_container_width=True):
-                        delete_project(p['id'])
-                        st.session_state["confirm_delete_project"] = None
-                        st.toast("Projet supprimé")
-                        time.sleep(0.5)
-                        st.rerun()
+                    col_act2.button("Suppression...", disabled=True, key=f"del_dis_{p['id']}", use_container_width=True)
                 else:
-                    if col_act2.button("🗑️", key=f"del_{p['id']}", help="Supprimer", use_container_width=True):
+                    if col_act2.button("🗑️ Supprimer", key=f"del_{p['id']}", help="Supprimer", use_container_width=True):
                         st.session_state["confirm_delete_project"] = p['id']
                         st.rerun()
             
             if st.session_state.get("confirm_delete_project") == p['id']:
-                st.warning("⚠️ Confirmez pour supprimer ✓ (Toutes les données du projet seront perdues)")
+                st.error("⚠️ Êtes-vous sûr de vouloir supprimer ce projet et toutes ses données (incluant les courbes) de façon permanente ?")
+                col_yes, col_no = st.columns([1, 1])
+                if col_yes.button("🚨 Oui, supprimer", key=f"confirm_yes_{p['id']}", use_container_width=True, type="primary"):
+                    delete_project(p['id'])
+                    # If the currently active project was deleted, reset the tracking keys
+                    if st.session_state.get("project_id") == p['id']:
+                        st.session_state["project_id"] = None
+                        st.session_state["project_name"] = None
+                    st.session_state["confirm_delete_project"] = None
+                    st.success("Projet supprimé avec succès.")
+                    time.sleep(1)
+                    st.rerun()
+                if col_no.button("❌ Annuler", key=f"confirm_no_{p['id']}", use_container_width=True):
+                    st.session_state["confirm_delete_project"] = None
+                    st.rerun()
             
             st.markdown("<hr style='margin: 5px 0; opacity: 0.1;'>", unsafe_allow_html=True)
