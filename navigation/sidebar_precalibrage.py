@@ -48,12 +48,14 @@ def render_sidebar_precalibrage():
             st.divider()
             if st.button("Générer le scénario", type="primary", use_container_width=True):
                 # Call aggregation to build consolidated DataFrames
-                with st.spinner("Agrégation des courbes..."):
+                with st.spinner("Agrégation des courbes et sauvegarde du projet..."):
                     try:
                         from services.data_aggregation import build_dataframes
+                        from services.database import save_project
+                        from services.state_serializer import serialize_state
                         
-                        points_consumers = st.session_state.get("points_consumers", [])
-                        points_producers = st.session_state.get("points_producers", [])
+                        points_consumers = st.session_state.get("points_soutirage", [])
+                        points_producers = st.session_state.get("points_injection", [])
                         
                         consumers_df, producers_df, aggregation_summary = build_dataframes(
                             points_consumers, points_producers
@@ -74,8 +76,20 @@ def render_sidebar_precalibrage():
                             f"{aggregation_summary.get('consumers_with_data', 0)} consommateurs, "
                             f"{aggregation_summary.get('producers_with_data', 0)} producteurs"
                         )
+                        
+                        # Auto-save after successful generation
+                        if st.session_state.get("project_id"):
+                            state_to_save = serialize_state(dict(st.session_state))
+                            save_project(
+                                name=st.session_state.get("project_name", "Sans titre"),
+                                current_phase="precalibrage",
+                                state_dict=state_to_save,
+                                project_id=st.session_state.get("project_id")
+                            )
+                            st.toast("✅ Projet sauvegardé automatiquement")
+
                     except Exception as e:
-                        st.error(f"❌ Erreur agrégation: {e}")
+                        st.error(f"❌ Erreur agrégation ou sauvegarde: {e}")
                         import traceback
                         st.error(traceback.format_exc())
                 
@@ -86,23 +100,4 @@ def render_sidebar_precalibrage():
 
         st.divider()
         
-        # --- Save Persistence ---
-        # Only show save button if we are inside a project (page > 0)
-        if current_page > 0:
-            from services.database import save_project
-            from services.state_serializer import serialize_state
-            
-            # Simple Save Button at bottom
-            if st.button("💾 Sauver l'état", use_container_width=True, help="Enregistrer le projet en base de données"):
-                try:
-                    state_to_save = serialize_state(dict(st.session_state))
-                    project_id = save_project(
-                        name=st.session_state.get("project_name", "Sans titre"),
-                        current_phase="precalibrage",
-                        state_dict=state_to_save,
-                        project_id=st.session_state.get("project_id")
-                    )
-                    st.session_state["project_id"] = project_id
-                    st.toast("✅ Projet sauvegardé")
-                except Exception as e:
-                    st.error(f"Erreur sauvegarde: {e}")
+        st.divider()
