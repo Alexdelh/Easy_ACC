@@ -243,6 +243,11 @@ def render():
     if "points_injection" not in st.session_state:
         st.session_state["points_injection"] = []
 
+    # Ensure edit state keys exist to avoid KeyError when accessed later
+    if "edit_injection_idx" not in st.session_state:
+        st.session_state["edit_injection_idx"] = None
+    if "edit_injection_form" not in st.session_state:
+        st.session_state["edit_injection_form"] = None
     # Create two tabs
     tab1, tab2 = st.tabs(["📊 Gestion des points", "🗺️ Vérification des contraintes"])
 
@@ -375,6 +380,48 @@ def render():
                     edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
                 with col3:
                     edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_adresse")
+                    
+                    # Auto-géolocalisation si adresse remplie et changée
+                    if edit_state["adresse"] and edit_state["adresse"] != edit_state.get("last_geocoded_address", ""):
+                        with st.spinner("Géolocalisation..."):
+                            coords = get_coordinates_from_address(edit_state["adresse"])
+                            if coords and coords.get("lat") and coords.get("lng"):
+                                edit_state["coords"] = coords
+                                edit_state["manual_lat"] = coords["lat"]
+                                edit_state["manual_lng"] = coords["lng"]
+                                # Mettre à jour les widgets directement
+                                st.session_state["edit_inj_lat"] = coords["lat"]
+                                st.session_state["edit_inj_lng"] = coords["lng"]
+                                edit_state["last_geocoded_address"] = edit_state["adresse"]
+                    
+                    # Initialiser les coordonnées manuelles si nécessaire
+                    if "manual_lat" not in edit_state:
+                        edit_state["manual_lat"] = (edit_state.get("coords") or {}).get("lat", 0.0)
+                    if "manual_lng" not in edit_state:
+                        edit_state["manual_lng"] = (edit_state.get("coords") or {}).get("lng", 0.0)
+                    
+                    # Afficher lat/lon éditables
+                    col_lat_edit, col_lng_edit = st.columns(2)
+                    with col_lat_edit:
+                        edit_state["manual_lat"] = st.number_input(
+                            "Latitude", 
+                            value=float(edit_state["manual_lat"]), 
+                            format="%.6f",
+                            step=0.001,
+                            key="edit_inj_lat"
+                        )
+                    with col_lng_edit:
+                        edit_state["manual_lng"] = st.number_input(
+                            "Longitude", 
+                            value=float(edit_state["manual_lng"]), 
+                            format="%.6f",
+                            step=0.001,
+                            key="edit_inj_lng"
+                        )
+                    
+                    # Mettre à jour coords avec les valeurs manuelles
+                    if edit_state["manual_lat"] != 0.0 or edit_state["manual_lng"] != 0.0:
+                        edit_state["coords"] = {"lat": edit_state["manual_lat"], "lng": edit_state["manual_lng"]}
                 if st.button("💾 Enregistrer les modifications", key="save_edit_injection", type="primary"):
                     # Remplacer l'ancien point par le modifié
                     st.session_state["points_injection"][st.session_state["edit_injection_idx"]] = edit_state.copy()
@@ -444,6 +491,51 @@ def render():
                 state["adresse"] = st.text_input(
                     "Adresse *", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris"
                 )
+                
+                # Auto-géolocalisation si adresse remplie
+                if state["adresse"] and state["adresse"] != state.get("last_geocoded_address", ""):
+                    with st.spinner("Géolocalisation..."):
+                        coords = get_coordinates_from_address(state["adresse"])
+                        if coords and coords.get("lat") and coords.get("lng"):
+                            state["coords"] = coords
+                            state["manual_lat"] = coords["lat"]
+                            state["manual_lng"] = coords["lng"]
+                            # Mettre à jour les widgets directement
+                            st.session_state["inj_lat"] = coords["lat"]
+                            st.session_state["inj_lng"] = coords["lng"]
+                            state["last_geocoded_address"] = state["adresse"]
+                        else:
+                            st.warning("⚠️ Géolocalisation impossible pour cette adresse")
+                
+                # Initialiser les coordonnées manuelles si nécessaire
+                if "manual_lat" not in state:
+                    state["manual_lat"] = (state.get("coords") or {}).get("lat", 0.0)
+                if "manual_lng" not in state:
+                    state["manual_lng"] = (state.get("coords") or {}).get("lng", 0.0)
+                
+                # Afficher lat/lon éditables
+                col_lat, col_lng = st.columns(2)
+                with col_lat:
+                    state["manual_lat"] = st.number_input(
+                        "Latitude", 
+                        value=float(state["manual_lat"]), 
+                        format="%.6f",
+                        step=0.001,
+                        key="inj_lat"
+                    )
+                with col_lng:
+                    state["manual_lng"] = st.number_input(
+                        "Longitude", 
+                        value=float(state["manual_lng"]), 
+                        format="%.6f",
+                        step=0.001,
+                        key="inj_lng"
+                    )
+                
+                # Mettre à jour coords avec les valeurs manuelles
+                if state["manual_lat"] != 0.0 or state["manual_lng"] != 0.0:
+                    state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
+                
                 sources = ["Aucune", "Téléverser XLS", "Modéliser via PVGIS", "📚 Bibliothèque"]
                 state["source"] = st.radio(
                     "Source de la courbe de production",
@@ -500,38 +592,35 @@ def render():
                         st.warning("⚠️ Les paramètres ont changé. Cliquez sur 'Générer' pour recalculer la courbe.")
 
                     if st.button("🔄 Générer courbe PVGIS", use_container_width=True):
-                        if not state["nom"] or not state["adresse"] or state["puissance"] <= 0:
-                            st.error("⚠️ Remplissez Nom, Adresse et Puissance d'abord")
+                        if not state["nom"] or state["puissance"] <= 0:
+                            st.error("⚠️ Remplissez Nom et Puissance d'abord")
+                        elif not state.get("coords") or not state["coords"].get("lat") or not state["coords"].get("lng"):
+                            st.error("⚠️ Coordonnées GPS manquantes. Remplissez l'adresse ou saisissez la latitude/longitude")
                         elif not start_date or not end_date:
                             st.error("⚠️ Configurez les dates dans 'Infos générales' d'abord")
                         elif start_date >= end_date:
                             st.error("⚠️ La date de début doit être antérieure à la date de fin")
                         else:
-                            with st.spinner("Géolocalisation et génération en cours..."):
-                                coords = get_coordinates_from_address(state["adresse"])
-                                if coords and coords.get("lat") and coords.get("lng"):
-                                    state["coords"] = coords
-
-                                    curve = compute_pv_curve(
-                                        lat=coords["lat"],
-                                        lon=coords["lng"],
-                                        peakpower_kw=float(state["puissance"]),
-                                        tilt_deg=float(tilt),
-                                        azimuth_deg=float(azimuth),
-                                        losses_pct=float(losses),
-                                        start_date=start_date,
-                                        end_date=end_date,
-                                    )
-                                    if curve is not None:
-                                        state["curve_data"] = curve
-                                        state["last_pvgis_params"] = current_params
-                                        duration_days = (end_date - start_date).days
-                                        st.success(f"✅ Courbe PVGIS générée : {len(curve)} heures ({duration_days} jours)")
-                                    else:
-                                        st.error("⚠️ Erreur génération courbe PVGIS")
-                                        state["curve_data"] = None
+                            with st.spinner("Génération de la courbe PVGIS en cours..."):
+                                coords = state["coords"]
+                                curve = compute_pv_curve(
+                                    lat=coords["lat"],
+                                    lon=coords["lng"],
+                                    peakpower_kw=float(state["puissance"]),
+                                    tilt_deg=float(tilt),
+                                    azimuth_deg=float(azimuth),
+                                    losses_pct=float(losses),
+                                    start_date=start_date,
+                                    end_date=end_date,
+                                )
+                                if curve is not None:
+                                    state["curve_data"] = curve
+                                    state["last_pvgis_params"] = current_params
+                                    duration_days = (end_date - start_date).days
+                                    st.success(f"✅ Courbe PVGIS générée : {len(curve)} heures ({duration_days} jours)")
+                                    st.rerun()
                                 else:
-                                    st.error("⚠️ Impossible de géolocaliser l'adresse")
+                                    st.error("⚠️ Erreur génération courbe PVGIS")
                                     state["curve_data"] = None
 
                 elif state["source"] == "📚 Bibliothèque":
@@ -574,6 +663,7 @@ def render():
                     try:
                         result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
 
+                        print("Result from process_curve:", result)  # Debug log
                         if result.get("success") and result.get("df") is not None and len(result["df"]) > 0:
                             norm_df = result["df"]
 
@@ -635,7 +725,7 @@ def render():
                         st.info("↖️ Configurez et générez/téléversez la courbe pour voir l'aperçu")
         else:
             st.info("✏️ Mode édition actif : le formulaire d'ajout est masqué.")
-        # Validation button (always visible)
+
         col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
         
         with col_btn1:

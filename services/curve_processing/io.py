@@ -53,6 +53,34 @@ def read_curve(file_or_df: Any) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     elif isinstance(file_or_df, pd.DataFrame):
         raw_df = file_or_df.copy()
         metadata["source_file"] = "dataframe"
+        
+        # Special case: DataFrame already has DatetimeIndex and numeric columns (e.g., PVGIS output)
+        if isinstance(raw_df.index, pd.DatetimeIndex):
+            num_cols = raw_df.select_dtypes(include=['number']).columns
+            if len(num_cols) > 0:
+                # Already well-formatted, just normalize
+                df = raw_df[[num_cols[0]]].copy()
+                df.columns = ['value']
+                
+                # Infer unit from column name
+                col_name = num_cols[0].lower()
+                if 'kw' in col_name:
+                    metadata["unit"] = "kW"
+                elif 'w' in col_name and 'kw' not in col_name:
+                    df['value'] = df['value'] / 1000.0
+                    metadata["unit"] = "kW"
+                else:
+                    metadata["unit"] = "kW"  # Default assumption
+                
+                # Normalize timezone
+                if df.index.tz is not None:
+                    df.index = df.index.tz_localize(None)
+                
+                metadata["detected_format"] = "PreFormatted"
+                metadata["total_rows"] = len(df)
+                metadata["frequency"] = _infer_frequency(df.index)
+                
+                return df, metadata
     else:
         raise TypeError(f"Expected str, file-like, or DataFrame; got {type(file_or_df)}")
 

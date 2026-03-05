@@ -304,6 +304,48 @@ def render():
                     edit_state["nom"] = st.text_input("Nom *", value=edit_state["nom"], key="edit_sout_nom")
                     edit_state["segment"] = st.text_input("Segment", value=edit_state["segment"], key="edit_sout_segment")
                     edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_sout_adresse")
+                    
+                    # Auto-géolocalisation si adresse remplie et changée
+                    if edit_state["adresse"] and edit_state["adresse"] != edit_state.get("last_geocoded_address", ""):
+                        with st.spinner("Géolocalisation..."):
+                            coords = get_coordinates_from_address(edit_state["adresse"])
+                            if coords and coords.get("lat") and coords.get("lng"):
+                                edit_state["coords"] = coords
+                                edit_state["manual_lat"] = coords["lat"]
+                                edit_state["manual_lng"] = coords["lng"]
+                                # Mettre à jour les widgets directement
+                                st.session_state["edit_sout_lat"] = coords["lat"]
+                                st.session_state["edit_sout_lng"] = coords["lng"]
+                                edit_state["last_geocoded_address"] = edit_state["adresse"]
+                    
+                    # Initialiser les coordonnées manuelles si nécessaire
+                    if "manual_lat" not in edit_state:
+                        edit_state["manual_lat"] = (edit_state.get("coords") or {}).get("lat", 0.0)
+                    if "manual_lng" not in edit_state:
+                        edit_state["manual_lng"] = (edit_state.get("coords") or {}).get("lng", 0.0)
+                    
+                    # Afficher lat/lon éditables
+                    col_lat_edit, col_lng_edit = st.columns(2)
+                    with col_lat_edit:
+                        edit_state["manual_lat"] = st.number_input(
+                            "Latitude", 
+                            value=float(edit_state["manual_lat"]), 
+                            format="%.6f",
+                            step=0.001,
+                            key="edit_sout_lat"
+                        )
+                    with col_lng_edit:
+                        edit_state["manual_lng"] = st.number_input(
+                            "Longitude", 
+                            value=float(edit_state["manual_lng"]), 
+                            format="%.6f",
+                            step=0.001,
+                            key="edit_sout_lng"
+                        )
+                    
+                    # Mettre à jour coords avec les valeurs manuelles
+                    if edit_state["manual_lat"] != 0.0 or edit_state["manual_lng"] != 0.0:
+                        edit_state["coords"] = {"lat": edit_state["manual_lat"], "lng": edit_state["manual_lng"]}
                 with col2:
                     edit_state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=edit_state["tarif_reference"], format="%.2f", key="edit_sout_tarif_reference")
                     edit_state["apply_tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("apply_tva", False), key="edit_sout_apply_tva")
@@ -360,6 +402,50 @@ def render():
             state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
             state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
             state["adresse"] = st.text_input("Adresse *", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
+            
+            # Auto-géolocalisation si adresse remplie
+            if state["adresse"] and state["adresse"] != state.get("last_geocoded_address", ""):
+                with st.spinner("Géolocalisation..."):
+                    coords = get_coordinates_from_address(state["adresse"])
+                    if coords and coords.get("lat") and coords.get("lng"):
+                        state["coords"] = coords
+                        state["manual_lat"] = coords["lat"]
+                        state["manual_lng"] = coords["lng"]
+                        # Mettre à jour les widgets directement
+                        st.session_state["sout_lat"] = coords["lat"]
+                        st.session_state["sout_lng"] = coords["lng"]
+                        state["last_geocoded_address"] = state["adresse"]
+                    else:
+                        st.warning("⚠️ Géolocalisation impossible pour cette adresse")
+            
+            # Initialiser les coordonnées manuelles si nécessaire
+            if "manual_lat" not in state:
+                state["manual_lat"] = (state.get("coords") or {}).get("lat", 0.0)
+            if "manual_lng" not in state:
+                state["manual_lng"] = (state.get("coords") or {}).get("lng", 0.0)
+            
+            # Afficher lat/lon éditables
+            col_lat, col_lng = st.columns(2)
+            with col_lat:
+                state["manual_lat"] = st.number_input(
+                    "Latitude", 
+                    value=float(state["manual_lat"]), 
+                    format="%.6f",
+                    step=0.001,
+                    key="sout_lat"
+                )
+            with col_lng:
+                state["manual_lng"] = st.number_input(
+                    "Longitude", 
+                    value=float(state["manual_lng"]), 
+                    format="%.6f",
+                    step=0.001,
+                    key="sout_lng"
+                )
+            
+            # Mettre à jour coords avec les valeurs manuelles
+            if state["manual_lat"] != 0.0 or state["manual_lng"] != 0.0:
+                state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
         
         with col2:
             state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_reference"], format="%.2f")
