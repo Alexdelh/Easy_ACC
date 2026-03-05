@@ -349,12 +349,17 @@ def render():
                     if "manual_lng" not in edit_state:
                         edit_state["manual_lng"] = (edit_state.get("coords") or {}).get("lng", 0.0)
                     
+                    # Initialiser les widgets dans session_state pour éviter le warning
+                    if "edit_sout_lat" not in st.session_state:
+                        st.session_state["edit_sout_lat"] = float(edit_state["manual_lat"])
+                    if "edit_sout_lng" not in st.session_state:
+                        st.session_state["edit_sout_lng"] = float(edit_state["manual_lng"])
+                    
                     # Afficher lat/lon éditables
                     col_lat_edit, col_lng_edit = st.columns(2)
                     with col_lat_edit:
                         edit_state["manual_lat"] = st.number_input(
                             "Latitude", 
-                            value=float(edit_state["manual_lat"]), 
                             format="%.6f",
                             step=0.001,
                             key="edit_sout_lat"
@@ -362,7 +367,6 @@ def render():
                     with col_lng_edit:
                         edit_state["manual_lng"] = st.number_input(
                             "Longitude", 
-                            value=float(edit_state["manual_lng"]), 
                             format="%.6f",
                             step=0.001,
                             key="edit_sout_lng"
@@ -535,12 +539,17 @@ def render():
             if "manual_lng" not in state:
                 state["manual_lng"] = (state.get("coords") or {}).get("lng", 0.0)
             
+            # Initialiser les widgets dans session_state pour éviter le warning
+            if "sout_lat" not in st.session_state:
+                st.session_state["sout_lat"] = float(state["manual_lat"])
+            if "sout_lng" not in st.session_state:
+                st.session_state["sout_lng"] = float(state["manual_lng"])
+            
             # Afficher lat/lon éditables
             col_lat, col_lng = st.columns(2)
             with col_lat:
                 state["manual_lat"] = st.number_input(
                     "Latitude", 
-                    value=float(state["manual_lat"]), 
                     format="%.6f",
                     step=0.001,
                     key="sout_lat"
@@ -548,7 +557,6 @@ def render():
             with col_lng:
                 state["manual_lng"] = st.number_input(
                     "Longitude", 
-                    value=float(state["manual_lng"]), 
                     format="%.6f",
                     step=0.001,
                     key="sout_lng"

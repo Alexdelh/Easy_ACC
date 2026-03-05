@@ -406,6 +406,52 @@ def render():
                     edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
                 with col3:
                     edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_adresse")
+                    
+                    # Auto-géolocalisation si adresse remplie et changée
+                    if edit_state["adresse"] and edit_state["adresse"] != edit_state.get("last_geocoded_address", ""):
+                        with st.spinner("Géolocalisation..."):
+                            coords = get_coordinates_from_address(edit_state["adresse"])
+                            if coords and coords.get("lat") and coords.get("lng"):
+                                edit_state["coords"] = coords
+                                edit_state["manual_lat"] = coords["lat"]
+                                edit_state["manual_lng"] = coords["lng"]
+                                # Mettre à jour les widgets directement
+                                st.session_state["edit_inj_lat"] = coords["lat"]
+                                st.session_state["edit_inj_lng"] = coords["lng"]
+                                edit_state["last_geocoded_address"] = edit_state["adresse"]
+                    
+                    # Initialiser les coordonnées manuelles si nécessaire
+                    if "manual_lat" not in edit_state:
+                        edit_state["manual_lat"] = (edit_state.get("coords") or {}).get("lat", 0.0)
+                    if "manual_lng" not in edit_state:
+                        edit_state["manual_lng"] = (edit_state.get("coords") or {}).get("lng", 0.0)
+                    
+                    # Initialiser les widgets dans session_state pour éviter le warning
+                    if "edit_inj_lat" not in st.session_state:
+                        st.session_state["edit_inj_lat"] = float(edit_state["manual_lat"])
+                    if "edit_inj_lng" not in st.session_state:
+                        st.session_state["edit_inj_lng"] = float(edit_state["manual_lng"])
+                    
+                    # Afficher lat/lon éditables
+                    col_lat_edit, col_lng_edit = st.columns(2)
+                    with col_lat_edit:
+                        edit_state["manual_lat"] = st.number_input(
+                            "Latitude", 
+                            format="%.6f",
+                            step=0.001,
+                            key="edit_inj_lat"
+                        )
+                    with col_lng_edit:
+                        edit_state["manual_lng"] = st.number_input(
+                            "Longitude", 
+                            format="%.6f",
+                            step=0.001,
+                            key="edit_inj_lng"
+                        )
+                    
+                    # Mettre à jour coords avec les valeurs manuelles
+                    if edit_state["manual_lat"] != 0.0 or edit_state["manual_lng"] != 0.0:
+                        edit_state["coords"] = {"lat": edit_state["manual_lat"], "lng": edit_state["manual_lng"]}
                 
                 # --- Gestion de la courbe de production dans l'édition ---
                 st.markdown("---")
@@ -600,6 +646,55 @@ def render():
                 state["adresse"] = st.text_input(
                     "Adresse *", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris"
                 )
+                
+                # Auto-géolocalisation si adresse remplie
+                if state["adresse"] and state["adresse"] != state.get("last_geocoded_address", ""):
+                    with st.spinner("Géolocalisation..."):
+                        coords = get_coordinates_from_address(state["adresse"])
+                        if coords and coords.get("lat") and coords.get("lng"):
+                            state["coords"] = coords
+                            state["manual_lat"] = coords["lat"]
+                            state["manual_lng"] = coords["lng"]
+                            # Mettre à jour les widgets directement
+                            st.session_state["inj_lat"] = coords["lat"]
+                            st.session_state["inj_lng"] = coords["lng"]
+                            state["last_geocoded_address"] = state["adresse"]
+                        else:
+                            st.warning("⚠️ Géolocalisation impossible pour cette adresse")
+                
+                # Initialiser les coordonnées manuelles si nécessaire
+                if "manual_lat" not in state:
+                    state["manual_lat"] = (state.get("coords") or {}).get("lat", 0.0)
+                if "manual_lng" not in state:
+                    state["manual_lng"] = (state.get("coords") or {}).get("lng", 0.0)
+                
+                # Initialiser les widgets dans session_state pour éviter le warning
+                if "inj_lat" not in st.session_state:
+                    st.session_state["inj_lat"] = float(state["manual_lat"])
+                if "inj_lng" not in st.session_state:
+                    st.session_state["inj_lng"] = float(state["manual_lng"])
+                
+                # Afficher lat/lon éditables
+                col_lat, col_lng = st.columns(2)
+                with col_lat:
+                    state["manual_lat"] = st.number_input(
+                        "Latitude", 
+                        format="%.6f",
+                        step=0.001,
+                        key="inj_lat"
+                    )
+                with col_lng:
+                    state["manual_lng"] = st.number_input(
+                        "Longitude", 
+                        format="%.6f",
+                        step=0.001,
+                        key="inj_lng"
+                    )
+                
+                # Mettre à jour coords avec les valeurs manuelles
+                if state["manual_lat"] != 0.0 or state["manual_lng"] != 0.0:
+                    state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
+                
                 sources = ["Aucune", "Téléverser XLS", "Modéliser via PVGIS"]
                 state["source"] = st.radio(
                     "Source de la courbe de production",
