@@ -72,6 +72,11 @@ def build_dataframes(
     consumers_ts = {}
     for point in points_consumers:
         pdl_name = point.get("nom") or point.get("pdl") or f"Consumer_{len(consumers_ts)}"
+        
+        if not point.get("active", True):
+            summary["errors"].append(f"Consumer '{pdl_name}': inactive, skipped")
+            continue
+            
         curve = point.get("courbe_consommation") or point.get("curve_data")
 
         if curve is None:
@@ -103,6 +108,11 @@ def build_dataframes(
     producers_ts = {}
     for point in points_producers:
         pdl_name = point.get("nom") or point.get("pdl") or f"Producer_{len(producers_ts)}"
+        
+        if not point.get("active", True):
+            summary["errors"].append(f"Producer '{pdl_name}': inactive, skipped")
+            continue
+            
         curve = point.get("courbe_production") or point.get("curve_data")
 
         if curve is None:
