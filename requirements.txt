@@ -16,3 +16,11 @@ openpyxl>=3.1.0
 pvlib==0.10.5
 plotly==5.18.0
 sqlalchemy>=2.0.46
+kaleido==0.2.1
+watchdog==6.0.0
+plotly==5.18.0
+fonttools==4.61.1
+fpdf==1.7.2
+watchdog==6.0.0
+MarkupSafe==3.0.3
+requests==2.32.5
