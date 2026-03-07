@@ -651,18 +651,31 @@ def render():
         # we put it behind a standard button first, then render the download button
         if st.button("📄 Préparer PDF", use_container_width=True):
             with st.spinner("Génération du PDF en cours... (Téléchargement des graphiques)"):
-                from services.pdf_generator import generate_bilan_pdf
+                from services.pdf_generator import generate_bilan_pdf, ensure_kaleido_is_patched
+                import concurrent.futures
+                
                 try:
-                    pdf_bytes = generate_bilan_pdf(
-                        state=st.session_state,
-                        fig_donut_main=fig_donut_main,
-                        fig_prod_donut=fig_prod_donut,
-                        fig_surplus_donut=fig_surplus_donut,
-                        fig_conso_donut=fig_conso_donut,
-                        fig_acc_donut=fig_acc_donut,
-                        fig_conso_line=fig_conso,
-                        fig_prod_line=fig_prod
-                    )
+                    # 1. Ensure Mac paths with spaces are patched automatically
+                    ensure_kaleido_is_patched()
+                    
+                    # 2. Wrap generation in an isolated thread to allow timeouts
+                    def _generate():
+                        return generate_bilan_pdf(
+                            state=st.session_state,
+                            fig_donut_main=fig_donut_main,
+                            fig_prod_donut=fig_prod_donut,
+                            fig_surplus_donut=fig_surplus_donut,
+                            fig_conso_donut=fig_conso_donut,
+                            fig_acc_donut=fig_acc_donut,
+                            fig_conso_line=fig_conso,
+                            fig_prod_line=fig_prod
+                        )
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(_generate)
+                        # Kaleido is fast. A stall natively means it crashed silently due to architectures.
+                        pdf_bytes = future.result(timeout=45)
+                        
                     st.download_button(
                         label="⬇️ Télécharger le PDF",
                         data=pdf_bytes,
@@ -671,5 +684,12 @@ def render():
                         use_container_width=True,
                         type="primary"
                     )
+                except concurrent.futures.TimeoutError:
+                    st.error("⚠️ La génération PDF a pris trop de temps (Timeout). Si vous êtes sur un Mac M1/M2/M3, l'export de graphiques nécessite *Rosetta 2*. \\n\\n👉 Ouvrez le terminal et tapez : `softwareupdate --install-rosetta` puis redémarrez l'application.")
+                except OSError as e:
+                    if "Bad CPU type in executable" in str(e):
+                        st.error("⚠️ Incompatibilité système détectée (Mac sans Rosetta 2). \\n\\n👉 Ouvrez le terminal et tapez : `softwareupdate --install-rosetta` puis redémarrez l'application.")
+                    else:
+                        st.error(f"⚠️ Erreur système lors de la génération : {e}")
                 except Exception as e:
                     st.error(f"⚠️ Erreur lors de la génération : {e}")
