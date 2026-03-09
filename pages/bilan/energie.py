@@ -218,8 +218,7 @@ def render():
                 continue
 
             # ---------- Phase ACI prioritaire ----------
-            # consumer_ACI must map consumer -> producer_name (string)
-            # 1) allocate from specific mapped producers
+            
             for c in df_conso.columns:
                 mapped = consumer_ACI.get(c)
                 if isinstance(mapped, str) and mapped in cur_prod:
@@ -233,9 +232,7 @@ def render():
                         cur_conso[c] -= allocated
                         cur_prod[mapped] -= allocated
 
-            # Note: ACI without a mapped producer is not supported — only mappings consumer->producer_name are honoured.
 
-            # After ACI pre-allocation, proceed with existing allocation logic using remaining demand and production
             surplus_total = 0
 
             # Recompute remaining production total for subsequent distribution
@@ -382,9 +379,13 @@ def render():
                     surplus_total += production_restante
 
             # ==================== Répartition du surplus par producteur ====================
-            # After all allocations, cur_prod contains remaining production per producer => that's the surplus
+          
             for p in df_prod.columns:
-                surplus_p = cur_prod.get(p, 0.0)
+                if orig_prod_total > 0:
+                    surplus_p = surplus_total * (orig_prod[p] / orig_prod_total)
+                else:
+                    surplus_p = 0.0
+                
                 surplus_prod[p] += surplus_p
 
                 # Autoproduction réellement consommée = original production - surplus
@@ -518,23 +519,13 @@ def render():
     # =========================================================
     if not df_conso_selected.empty:
         df_conso_plot = df_conso_selected.copy()
-        
-        # Filter conso_df to only include selected consumers that exist
-        available_consumers = [c for c in selected_consumers if c in conso_df.columns]
-        df_auto_conso_plot = conso_df[available_consumers].copy() if available_consumers else pd.DataFrame()
 
         n_conso = len(df_conso_plot.columns)
-        n_auto = len(df_auto_conso_plot.columns) if not df_auto_conso_plot.empty else 0
 
-        # Palettes dynamiques infinies
+        # Palette dynamique
         bleu_palette = pc.sample_colorscale(
             "Blues",
             np.linspace(0.35, 1, max(n_conso, 1))
-        )
-
-        rouge_palette = pc.sample_colorscale(
-            "Oranges",
-            np.linspace(0.35, 1, max(n_auto, 1))
         )
 
         fig_conso = px.line(
@@ -543,22 +534,6 @@ def render():
             color_discrete_sequence=bleu_palette,
             title="Courbes de Consommation"
         )
-
-        # Ajout autoproduction (ligne rouge/orange) - only if data exists and not all zeros
-        if not df_auto_conso_plot.empty:
-            for i, c in enumerate(df_auto_conso_plot.columns):
-                # Only add trace if there is non-zero data
-                if df_auto_conso_plot[c].sum() > 0:
-                    fig_conso.add_scatter(
-                        x=df_auto_conso_plot.index,
-                        y=df_auto_conso_plot[c],
-                        mode="lines",
-                        name=f"{c} (Autoproduite)",
-                        line=dict(
-                            color=rouge_palette[i],
-                            width=2
-                        )
-                    )
 
         fig_conso.update_layout(
             legend_title="",
@@ -569,10 +544,6 @@ def render():
         fig_conso.update_yaxes(fixedrange=True)
 
         st.plotly_chart(fig_conso, use_container_width=True)
-        
-        # Show info message if no autoproduite data
-        if df_auto_conso_plot.empty or df_auto_conso_plot.sum().sum() == 0:
-            st.info("ℹ️ Aucune autoproduction partagée détectée. Vérifiez que la clé de répartition est configurée et que les données de production sont disponibles.")
 
     else:
         st.info("Aucune consommation sélectionnée.")
@@ -582,20 +553,11 @@ def render():
     # =========================================================
     if not df_prod_selected.empty:
         df_prod_plot = df_prod_selected.copy()
-        
-        # Filter prod_df to only include selected producers that exist
-        available_producers = [p for p in selected_producers if p in prod_df.columns]
-        df_auto_prod_plot = prod_df[available_producers].copy() if available_producers else pd.DataFrame()
 
         n_prod = len(df_prod_plot.columns)
 
         bleu_palette = pc.sample_colorscale(
             "Blues",
-            np.linspace(0.35, 1, max(n_prod, 1))
-        )
-
-        rouge_palette = pc.sample_colorscale(
-            "Oranges",
             np.linspace(0.35, 1, max(n_prod, 1))
         )
 
@@ -606,22 +568,6 @@ def render():
             title="Courbes de Production"
         )
 
-        # Ajout autoproduction consommée - only if data exists and not all zeros
-        if not df_auto_prod_plot.empty:
-            for i, p in enumerate(df_auto_prod_plot.columns):
-                # Only add trace if there is non-zero data
-                if df_auto_prod_plot[p].sum() > 0:
-                    fig_prod.add_scatter(
-                        x=df_auto_prod_plot.index,
-                        y=df_auto_prod_plot[p],
-                        mode="lines",
-                        name=f"{p} (Autoconsommée)",
-                        line=dict(
-                            color=rouge_palette[i],
-                            width=2
-                        )
-                    )
-
         fig_prod.update_layout(
             legend_title="",
             xaxis_title="Pas de temps",
@@ -631,10 +577,6 @@ def render():
         fig_prod.update_yaxes(fixedrange=True)
 
         st.plotly_chart(fig_prod, use_container_width=True)
-        
-        # Show info message if no autoconsommée data
-        if df_auto_prod_plot.empty or df_auto_prod_plot.sum().sum() == 0:
-            st.info("ℹ️ Aucune autoproduction consommée détectée. Vérifiez que la clé de répartition est configurée et que les données de consommation sont disponibles.")
 
     else:
         st.info("Aucune production sélectionnée.")

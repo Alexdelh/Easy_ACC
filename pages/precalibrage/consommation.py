@@ -272,9 +272,11 @@ def render():
                 with cols[2]:
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[3]:
-                    aci_text = f" {point['aci_partenaire']}" if point['aci'] else "❌"
-                    st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_reference']}</div>", unsafe_allow_html=True)
                 with cols[4]:
+                    aci_text = f"✅ {point['aci_partenaire']}" if point['aci'] else "❌"
+                    st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
+                with cols[5]:
                     tva_status = "✅" if point.get('tva', False) else "❌"
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{tva_status}</div>", unsafe_allow_html=True)
                 with cols[6]:
@@ -328,7 +330,7 @@ def render():
                 with col1:
                     edit_state["nom"] = st.text_input("Nom *", value=edit_state["nom"], key="edit_sout_nom")
                     edit_state["segment"] = st.text_input("Segment", value=edit_state["segment"], key="edit_sout_segment")
-                    edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_sout_adresse")
+                    edit_state["adresse"] = st.text_input("Adresse", value=edit_state["adresse"], key="edit_sout_adresse")
                     
                     # Auto-géolocalisation si adresse remplie et changée
                     if edit_state["adresse"] and edit_state["adresse"] != edit_state.get("last_geocoded_address", ""):
@@ -516,7 +518,7 @@ def render():
         with col1:
             state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
             state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
-            state["adresse"] = st.text_input("Adresse *", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
+            state["adresse"] = st.text_input("Adresse", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
             
             # Auto-géolocalisation si adresse remplie
             if state["adresse"] and state["adresse"] != state.get("last_geocoded_address", ""):
@@ -665,48 +667,28 @@ def render():
                         if 'value' in norm_df.columns:
                             st.line_chart(norm_df['value'], use_container_width=True, height=300)
                         else:
-                            curve_df = pd.read_excel(uploaded_file)
-                        state["curve_data"] = curve_df
-                        st.success("✅ Fichier chargé")
+                            st.line_chart(norm_df, use_container_width=True, height=300)
+
+                        st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
+
+                        # Calculer le volume consommé
+                        if 'value' in norm_df.columns:
+                            volume_total = norm_df['value'].sum()
+                            volume_mwh = volume_total / 1000.0
+                            st.metric("Volume consommé estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
+                    else:
+                        st.warning("⚠️ Courbe non exploitable pour l'affichage.")
+                        if result.get('errors'):
+                            st.error(f"Erreurs: {result['errors']}")
+                        validation = result.get('validation') or {}
+                        if validation.get('errors'):
+                            st.error(f"Validation: {validation['errors']}")
                 except Exception as e:
-                    st.error(f"⚠️ Erreur lecture fichier: {e}")
-                    state["curve_data"] = None
-                    
-            with col_curve2:
-                # Display curve preview if available
-                if state["curve_data"] is not None:
-                    st.markdown("**📊 Aperçu**")
-                    try:
-                        result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
-
-                        if result.get('success') and result.get('df') is not None and len(result['df']) > 0:
-                            norm_df = result['df']
-                            # Plot only the numeric 'value' series if present
-                            if 'value' in norm_df.columns:
-                                st.line_chart(norm_df['value'], use_container_width=True, height=300)
-                            else:
-                                st.line_chart(norm_df, use_container_width=True, height=300)
-
-                            st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
-
-                            # Calculer le volume consommé
-                            if 'value' in norm_df.columns:
-                                volume_total = norm_df['value'].sum()
-                                volume_mwh = volume_total / 1000.0
-                                st.metric("Volume consommé estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
-                        else:
-                            st.warning("⚠️ Courbe non exploitable pour l'affichage.")
-                            if result.get('errors'):
-                                st.error(f"Erreurs: {result['errors']}")
-                            validation = result.get('validation') or {}
-                            if validation.get('errors'):
-                                st.error(f"Validation: {validation['errors']}")
-                    except Exception as e:
-                        st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
-                else:
-                    st.info("↖️ Chargez un fichier pour voir l'aperçu")
-            
-            st.divider()
+                    st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
+            else:
+                st.info("↖️ Chargez un fichier pour voir l'aperçu")
+        
+        st.divider()
         
         # Validation button (always visible)
         col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
@@ -714,19 +696,26 @@ def render():
         with col_btn1:
             if st.button("✅ Valider et ajouter le point", use_container_width=True, type="primary"):
                 # Validate all required fields
-                if not state["nom"] or not state["adresse"]:
-                    st.error("⚠️ Les champs Nom et Adresse sont obligatoires")
+                if not state["nom"]:
+                    st.error("⚠️ Le champ Nom est obligatoire")
                 elif state["curve_data"] is None:
                     st.error("⚠️ Une courbe de consommation est obligatoire")
                 else:
                     # Get coordinates if not already done
                     if not state["coords"]:
-                        coords = get_coordinates_from_address(state["adresse"])
-                        if coords and coords.get("lat") and coords.get("lng"):
-                            state["coords"] = coords
-                        else:
-                            st.error("⚠️ Impossible de géolocaliser l'adresse")
-                            state["coords"] = None
+                        # Try geocoding from address if provided
+                        if state["adresse"]:
+                            coords = get_coordinates_from_address(state["adresse"])
+                            if coords and coords.get("lat") and coords.get("lng"):
+                                state["coords"] = coords
+                        # Otherwise check if manual lat/lon are provided
+                        elif state["manual_lat"] != 0.0 and state["manual_lng"] != 0.0:
+                            state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
+                    
+                    # Final validation: coords must be set
+                    if not state["coords"] or not state["coords"].get("lat") or not state["coords"].get("lng"):
+                        st.error("⚠️ Coordonnées GPS manquantes. Renseignez l'adresse ou la latitude/longitude")
+                        state["coords"] = None
                     
                     if state["coords"]:
                         # Process uploaded curve and store processing result

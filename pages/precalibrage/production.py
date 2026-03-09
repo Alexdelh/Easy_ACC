@@ -405,7 +405,7 @@ def render():
                     edit_state["tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("tva", False), key="edit_tva")
                     edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
                 with col3:
-                    edit_state["adresse"] = st.text_input("Adresse *", value=edit_state["adresse"], key="edit_adresse")
+                    edit_state["adresse"] = st.text_input("Adresse", value=edit_state["adresse"], key="edit_adresse")
                     
                     # Auto-géolocalisation si adresse remplie et changée
                     if edit_state["adresse"] and edit_state["adresse"] != edit_state.get("last_geocoded_address", ""):
@@ -644,7 +644,7 @@ def render():
 
             with col3:
                 state["adresse"] = st.text_input(
-                    "Adresse *", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris"
+                    "Adresse", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris"
                 )
                 
                 # Auto-géolocalisation si adresse remplie
@@ -830,19 +830,26 @@ def render():
         with col_btn1:
             if st.button("✅ Valider et ajouter le point", use_container_width=True, type="primary"):
                 # Validate all required fields
-                if not state["nom"] or not state["adresse"]:
-                    st.error("⚠️ Les champs Nom et Adresse sont obligatoires")
+                if not state["nom"]:
+                    st.error("⚠️ Le champ Nom est obligatoire")
                 elif state["source"] != "Aucune" and state["curve_data"] is None:
                     st.error("⚠️ Une courbe est requise pour ce point")
                 else:
                     # Get coordinates if not already done
                     if not state["coords"]:
-                        coords = get_coordinates_from_address(state["adresse"])
-                        if coords and coords.get("lat") and coords.get("lng"):
-                            state["coords"] = coords
-                        else:
-                            st.error("⚠️ Impossible de géolocaliser l'adresse")
-                            state["coords"] = None
+                        # Try geocoding from address if provided
+                        if state["adresse"]:
+                            coords = get_coordinates_from_address(state["adresse"])
+                            if coords and coords.get("lat") and coords.get("lng"):
+                                state["coords"] = coords
+                        # Otherwise check if manual lat/lon are provided
+                        elif state["manual_lat"] != 0.0 and state["manual_lng"] != 0.0:
+                            state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
+                    
+                    # Final validation: coords must be set
+                    if not state["coords"] or not state["coords"].get("lat") or not state["coords"].get("lng"):
+                        st.error("⚠️ Coordonnées GPS manquantes. Renseignez l'adresse ou la latitude/longitude")
+                        state["coords"] = None
                     
                     if state["coords"]:
                         # Process uploaded curve and store processing result

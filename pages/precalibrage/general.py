@@ -79,64 +79,8 @@ def render():
             args=("operation_type", "_operation_type")
         )
         
-        st.divider()
-        st.subheader("Période d'étude")
+        st.divider()       
         
-        import datetime
-        
-        def _parse_date(val):
-            if isinstance(val, str):
-                try:
-                    return datetime.datetime.strptime(val, "%Y-%m-%d").date()
-                except ValueError:
-                    return None
-            return val
-            
-        # VERY IMPORTANT: If we loaded a completed project, the internal keys
-        # _start_date and _end_date may ALSO exist in state as simple strings.
-        # We must overwrite them with proper objects before date_input checks them.
-        if "_start_date" in st.session_state:
-            st.session_state["_start_date"] = _parse_date(st.session_state.get("_start_date"))
-        if "_end_date" in st.session_state:
-            st.session_state["_end_date"] = _parse_date(st.session_state.get("_end_date"))
-            
-        if "start_date" in st.session_state:
-            start_date_val = _parse_date(st.session_state["start_date"])
-        else:
-            start_date_val = None
-            
-        if "end_date" in st.session_state:
-            end_date_val = _parse_date(st.session_state["end_date"])
-        else:
-            end_date_val = None
-        
-        date_col1, date_col2 = st.columns(2)
-        with date_col1:
-            st.date_input(
-                "Date de début",
-                value=start_date_val,
-                key="_start_date",
-                help="Date de début pour la modélisation PVGIS et l'import des courbes",
-                on_change=auto_save_general_field,
-                args=("start_date", "_start_date")
-            )
-        
-        with date_col2:
-            st.date_input(
-                "Date de fin",
-                value=end_date_val,
-                key="_end_date",
-                help="Date de fin pour la modélisation PVGIS et l'import des courbes",
-                on_change=auto_save_general_field,
-                args=("end_date", "_end_date")
-            )
-        
-        # Validation des dates
-        start_date = st.session_state.get("start_date")
-        end_date = st.session_state.get("end_date")
-        if start_date and end_date:
-            if start_date >= end_date:
-                st.error("⚠️ La date de début doit être antérieure à la date de fin")
             
     with col2:
         st.subheader("Localisation du projet")
