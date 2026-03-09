@@ -51,7 +51,7 @@ def render():
                 justify-content: flex-end;
             }
 
-            div.stButton > button {
+            div.stButton > button, div.stDownloadButton > button {
                 background-color: #1F8A4C;
                 color: white;
                 border-radius: 8px;
@@ -61,15 +61,15 @@ def render():
                 width: 180px;   /* largeur fixe pour alignement parfait */
             }
 
-            div.stButton > button:hover {
+            div.stButton > button:hover, div.stDownloadButton > button:hover {
                 background-color: #166b3a;
                 color: white;
             }
             </style>
         """, unsafe_allow_html=True)
 
-        # Bouton Export PDF
-        st.button("📄 Exporter PDF")
+        # Placeholder pour le bouton Export PDF
+        export_placeholder = st.empty()
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
     st.markdown("<div style='height:40px;'></div>", unsafe_allow_html=True)
@@ -118,7 +118,7 @@ def render():
     
     # Donut principal pour taux de couverture
     with donut_col:
-        fig = go.Figure(data=[go.Pie(
+        fig_donut_main = go.Figure(data=[go.Pie(
             values=[production_totale, consommation_totale],
             hole=0.7,
             marker=dict(colors=["#1F8A4C", "#A8D5BA"]),
@@ -126,12 +126,12 @@ def render():
             textinfo='none',
             hoverinfo='value+label'
         )])
-        fig.update_layout(
+        fig_donut_main.update_layout(
             showlegend=False,
             annotations=[dict(text=f"{taux_couverture}%", x=0.5, y=0.5, font=dict(size=32, color="#1F8A4C"), showarrow=False)],
             margin=dict(l=0, r=0, t=20, b=0), height=280
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_donut_main, use_container_width=True)
         
     # ===============================
     # FONCTIONS UTILITAIRES DONUTS
@@ -443,23 +443,23 @@ def render():
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        fig, colors = donut_total_kwh(prod_values, prod_labels)
-        st.plotly_chart(fig, use_container_width=False)
+        fig_prod_donut, colors = donut_total_kwh(prod_values, prod_labels)
+        st.plotly_chart(fig_prod_donut, use_container_width=False)
         display_legend(prod_labels, prod_values, colors)
 
     with col2:
-        fig, colors = donut_total_kwh(surplus_values, surplus_labels)
-        st.plotly_chart(fig, use_container_width=False)
+        fig_surplus_donut, colors = donut_total_kwh(surplus_values, surplus_labels)
+        st.plotly_chart(fig_surplus_donut, use_container_width=False)
         display_legend(surplus_labels, surplus_values, colors)
 
     with col3:
-        fig, colors = donut_total_kwh(conso_values, conso_labels)
-        st.plotly_chart(fig, use_container_width=False)
+        fig_conso_donut, colors = donut_total_kwh(conso_values, conso_labels)
+        st.plotly_chart(fig_conso_donut, use_container_width=False)
         display_legend(conso_labels, conso_values, colors)
 
     with col4:
-        fig, colors = donut_total_kwh(acc_values, acc_labels)
-        st.plotly_chart(fig, use_container_width=False)
+        fig_acc_donut, colors = donut_total_kwh(acc_values, acc_labels)
+        st.plotly_chart(fig_acc_donut, use_container_width=False)
         display_legend(acc_labels, acc_values, colors)
     
     # ===============================
@@ -514,6 +514,8 @@ def render():
     df_conso_selected = df_conso[selected_consumers] if selected_consumers else pd.DataFrame()
     df_prod_selected = df_prod[selected_producers] if selected_producers else pd.DataFrame()
 
+    fig_conso = px.line(title="Courbes de Consommation") # Default empty fig
+    
     # =========================================================
     # ================= CONSOMMATION ==========================
     # =========================================================
@@ -548,6 +550,8 @@ def render():
     else:
         st.info("Aucune consommation sélectionnée.")
 
+    fig_prod = px.line(title="Courbes de Production") # Default empty fig
+    
     # =========================================================
     # ================= PRODUCTION ============================
     # =========================================================
@@ -580,3 +584,54 @@ def render():
 
     else:
         st.info("Aucune production sélectionnée.")
+
+    # ===============================
+    # GÉNÉRATION DU PDF DANS LE PLACEHOLDER
+    # ===============================
+    with export_placeholder:
+        # Since generating the PDF takes time and uses kaleido/tempfiles,
+        # we put it behind a standard button first, then render the download button
+        if st.button("📄 Préparer PDF", use_container_width=True):
+            with st.spinner("Génération du PDF en cours... (Téléchargement des graphiques)"):
+                from services.pdf_generator import generate_bilan_pdf, ensure_kaleido_is_patched
+                import concurrent.futures
+                
+                try:
+                    # 1. Ensure Mac paths with spaces are patched automatically
+                    ensure_kaleido_is_patched()
+                    
+                    # 2. Wrap generation in an isolated thread to allow timeouts
+                    def _generate():
+                        return generate_bilan_pdf(
+                            state=st.session_state,
+                            fig_donut_main=fig_donut_main,
+                            fig_prod_donut=fig_prod_donut,
+                            fig_surplus_donut=fig_surplus_donut,
+                            fig_conso_donut=fig_conso_donut,
+                            fig_acc_donut=fig_acc_donut,
+                            fig_conso_line=fig_conso,
+                            fig_prod_line=fig_prod
+                        )
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(_generate)
+                        # Kaleido is fast. A stall natively means it crashed silently due to architectures.
+                        pdf_bytes = future.result(timeout=45)
+                        
+                    st.download_button(
+                        label="⬇️ Télécharger le PDF",
+                        data=pdf_bytes,
+                        file_name=f"Bilan_{st.session_state.get('project_name', 'projet')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary"
+                    )
+                except concurrent.futures.TimeoutError:
+                    st.error("⚠️ La génération PDF a pris trop de temps (Timeout). Si vous êtes sur un Mac M1/M2/M3, l'export de graphiques nécessite *Rosetta 2*. \\n\\n👉 Ouvrez le terminal et tapez : `softwareupdate --install-rosetta` puis redémarrez l'application.")
+                except OSError as e:
+                    if "Bad CPU type in executable" in str(e):
+                        st.error("⚠️ Incompatibilité système détectée (Mac sans Rosetta 2). \\n\\n👉 Ouvrez le terminal et tapez : `softwareupdate --install-rosetta` puis redémarrez l'application.")
+                    else:
+                        st.error(f"⚠️ Erreur système lors de la génération : {e}")
+                except Exception as e:
+                    st.error(f"⚠️ Erreur lors de la génération : {e}")

@@ -1,10 +1,40 @@
 import os
+import sys
+import stat
 import tempfile
 import datetime
 from io import BytesIO
 import plotly.graph_objects as go
 from fpdf import FPDF
 import streamlit as st
+
+def ensure_kaleido_is_patched():
+    """
+    Auto-patches the Kaleido executable on Mac/Linux if it has the known
+    bug with spaced directories in its bash wrapper.
+    """
+    if sys.platform == "win32":
+        return
+
+    try:
+        import kaleido
+        kaleido_dir = os.path.dirname(kaleido.__file__)
+        executable_path = os.path.join(kaleido_dir, "executable", "kaleido")
+        
+        if os.path.exists(executable_path):
+            with open(executable_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            target_line = 'DIR=$(cd $(dirname "${BASH_SOURCE[0]}") >/dev/null 2>&1 && pwd)'
+            if target_line in content:
+                new_line = 'DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"'
+                new_content = content.replace(target_line, new_line)
+                with open(executable_path, "w", encoding="utf-8") as f:
+                    f.write(new_content)
+                st_mode = os.stat(executable_path).st_mode
+                os.chmod(executable_path, st_mode | stat.S_IEXEC)
+    except Exception:
+        pass
 
 class BilanPDF(FPDF):
     def __init__(self, project_name="Easy ACC"):
@@ -116,5 +146,6 @@ def generate_bilan_pdf(
         pdf.image(line_c_path, x=10, w=180)
 
         # Build byte array of PDF
-        pdf_bytes = pdf.output(dest='S')
+        pdf_string = pdf.output(dest='S')
+        pdf_bytes = pdf_string.encode('latin1')
         return pdf_bytes
