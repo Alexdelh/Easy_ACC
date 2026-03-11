@@ -1,3 +1,4 @@
+
 import pandas as pd
 import streamlit as st
 import folium
@@ -5,6 +6,7 @@ from streamlit_folium import st_folium
 from utils.helpers import get_coordinates_from_postal_code
 from services.geolocation import get_coordinates_from_address
 from services.curve_processing import process_curve
+from services.curve_processing.alignment import align_curve_to_reference_year, CalendarAlignmentError
 import html
 import re
 from geopy.distance import geodesic
@@ -871,8 +873,10 @@ def render():
             st.info("💡 Les points décochés dans l'onglet 'Gestion des points' n'apparaîtront pas ici et seront ignorés lors de la génération du scénario.")
             
             # --- Création du DataFrame croisé consommateurs (datetime en index, noms en colonnes, valeurs = consommation) ---
+
             try:
                 dfs = []
+                reference_year = st.session_state.get("reference_year")
                 for p in points_soutirage:
                     if p.get("active", True):
                         courbe = p.get("courbe_consommation")
@@ -883,7 +887,6 @@ def render():
                             df = courbe
                         else:
                             continue
-                        
                         # On prend uniquement les colonnes datetime (index) et value
                         if not isinstance(df.index, pd.DatetimeIndex):
                             if "datetime" in df.columns:
@@ -892,14 +895,26 @@ def render():
                             continue
                         if "value" not in df.columns:
                             continue
-                        
+
+                        # Détection et stockage de l'année de référence
+                        if reference_year is None:
+                            reference_year = df.index[0].year
+                            st.session_state["reference_year"] = reference_year
+
+                        # Alignement calendaire
+                        try:
+                            df_aligned = align_curve_to_reference_year(df, reference_year)
+                        except CalendarAlignmentError as err:
+                            st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
+                            continue
                         # On ne garde que la colonne value, et on la renomme par le nom du consommateur
-                        dfs.append(df[["value"]].rename(columns={"value": nom}))
-                
+                        dfs.append(df_aligned[["value"]].rename(columns={"value": nom}))
+
                 if dfs:
                     df_conso = pd.concat(dfs, axis=1)
                     st.session_state["df_conso"] = df_conso
                     st.dataframe(df_conso, use_container_width=True)
+                    st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
                 else:
                     st.warning("⚠️ Aucun point de soutirage actif avec des données valides.")
             except Exception as e:
