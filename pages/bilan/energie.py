@@ -131,7 +131,7 @@ def render():
             annotations=[dict(text=f"{taux_couverture}%", x=0.5, y=0.5, font=dict(size=32, color="#1F8A4C"), showarrow=False)],
             margin=dict(l=0, r=0, t=20, b=0), height=280
         )
-        st.plotly_chart(fig_donut_main, use_container_width=True)
+        st.plotly_chart(fig_donut_main, width="stretch")
         
     # ===============================
     # FONCTIONS UTILITAIRES DONUTS
@@ -444,22 +444,22 @@ def render():
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         fig_prod_donut, colors = donut_total_kwh(prod_values, prod_labels)
-        st.plotly_chart(fig_prod_donut, use_container_width=False)
+        st.plotly_chart(fig_prod_donut, width="content")
         display_legend(prod_labels, prod_values, colors)
 
     with col2:
         fig_surplus_donut, colors = donut_total_kwh(surplus_values, surplus_labels)
-        st.plotly_chart(fig_surplus_donut, use_container_width=False)
+        st.plotly_chart(fig_surplus_donut, width="content")
         display_legend(surplus_labels, surplus_values, colors)
 
     with col3:
         fig_conso_donut, colors = donut_total_kwh(conso_values, conso_labels)
-        st.plotly_chart(fig_conso_donut, use_container_width=False)
+        st.plotly_chart(fig_conso_donut, width="content")
         display_legend(conso_labels, conso_values, colors)
 
     with col4:
         fig_acc_donut, colors = donut_total_kwh(acc_values, acc_labels)
-        st.plotly_chart(fig_acc_donut, use_container_width=False)
+        st.plotly_chart(fig_acc_donut, width="content")
         display_legend(acc_labels, acc_values, colors)
     
     # ===============================
@@ -545,7 +545,7 @@ def render():
 
         fig_conso.update_yaxes(fixedrange=True)
 
-        st.plotly_chart(fig_conso, use_container_width=True)
+        st.plotly_chart(fig_conso, width="stretch")
 
     else:
         st.info("Aucune consommation sélectionnée.")
@@ -580,7 +580,7 @@ def render():
 
         fig_prod.update_yaxes(fixedrange=True)
 
-        st.plotly_chart(fig_prod, use_container_width=True)
+        st.plotly_chart(fig_prod, width="stretch")
 
     else:
         st.info("Aucune production sélectionnée.")
@@ -591,7 +591,10 @@ def render():
     with export_placeholder:
         # Since generating the PDF takes time and uses kaleido/tempfiles,
         # we put it behind a standard button first, then render the download button
-        if st.button("📄 Préparer PDF", use_container_width=True):
+        
+        # We store the PDF bytes in session state to prevent the download button from disappearing
+        # when the user tries to click it (a classic Streamlit nested-button issue).
+        if st.button("📄 Préparer PDF", width="stretch"):
             with st.spinner("Génération du PDF en cours... (Téléchargement des graphiques)"):
                 from services.pdf_generator import generate_bilan_pdf, ensure_kaleido_is_patched
                 import concurrent.futures
@@ -600,10 +603,13 @@ def render():
                     # 1. Ensure Mac paths with spaces are patched automatically
                     ensure_kaleido_is_patched()
                     
+                    # Store state to normal dict to avoid missing ScriptRunContext in thread
+                    state_dict = dict(st.session_state)
+                    
                     # 2. Wrap generation in an isolated thread to allow timeouts
                     def _generate():
                         return generate_bilan_pdf(
-                            state=st.session_state,
+                            state=state_dict,
                             fig_donut_main=fig_donut_main,
                             fig_prod_donut=fig_prod_donut,
                             fig_surplus_donut=fig_surplus_donut,
@@ -617,15 +623,8 @@ def render():
                         future = executor.submit(_generate)
                         # Kaleido is fast. A stall natively means it crashed silently due to architectures.
                         pdf_bytes = future.result(timeout=45)
-                        
-                    st.download_button(
-                        label="⬇️ Télécharger le PDF",
-                        data=pdf_bytes,
-                        file_name=f"Bilan_{st.session_state.get('project_name', 'projet')}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        type="primary"
-                    )
+                    
+                    st.session_state["bilan_pdf_bytes"] = pdf_bytes
                 except concurrent.futures.TimeoutError:
                     st.error("⚠️ La génération PDF a pris trop de temps (Timeout). Si vous êtes sur un Mac M1/M2/M3, l'export de graphiques nécessite *Rosetta 2*. \\n\\n👉 Ouvrez le terminal et tapez : `softwareupdate --install-rosetta` puis redémarrez l'application.")
                 except OSError as e:
@@ -635,3 +634,13 @@ def render():
                         st.error(f"⚠️ Erreur système lors de la génération : {e}")
                 except Exception as e:
                     st.error(f"⚠️ Erreur lors de la génération : {e}")
+
+        if "bilan_pdf_bytes" in st.session_state:
+            st.download_button(
+                label="⬇️ Télécharger le PDF",
+                data=st.session_state["bilan_pdf_bytes"],
+                file_name=f"Bilan_{st.session_state.get('project_name', 'projet')}.pdf",
+                mime="application/pdf",
+                width="stretch",
+                type="primary"
+            )
