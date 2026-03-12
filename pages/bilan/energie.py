@@ -183,19 +183,19 @@ def render():
 
         n_rows = min(len(df_prod), len(df_conso))
 
-        def _deduct_from_producers(cur_prod: dict, amount: float) -> float:
-            """Deduct `amount` from producers in-place (largest-first). Returns total actually deducted."""
-            if amount <= 0:
-                return 0.0
-            remaining = amount
-            # sort producers by available desc
-            for p, avail in sorted(cur_prod.items(), key=lambda x: x[1], reverse=True):
-                if remaining <= 0:
-                    break
-                take = min(cur_prod[p], remaining)
-                cur_prod[p] -= take
-                remaining -= take
-            return amount - remaining
+        # def _deduct_from_producers(cur_prod: dict, amount: float) -> float:
+        #     """Deduct `amount` from producers in-place (largest-first). Returns total actually deducted."""
+        #     if amount <= 0:
+        #         return 0.0
+        #     remaining = amount
+        #     # sort producers by available desc
+        #     for p, avail in sorted(cur_prod.items(), key=lambda x: x[1], reverse=True):
+        #         if remaining <= 0:
+        #             break
+        #         take = min(cur_prod[p], remaining)
+        #         cur_prod[p] -= take
+        #         remaining -= take
+        #     return amount - remaining
 
         for t in range(n_rows):
 
@@ -237,6 +237,13 @@ def render():
 
             # Recompute remaining production total for subsequent distribution
             prod_total = sum(cur_prod.values())
+            
+            if prod_total == 0:
+               # Si aucune production → toute consommation devient complément
+                for c in df_conso.columns:
+                    conso_real = cur_conso[c]
+                    fourn_compl_total[c] += conso_real
+                continue
 
             # ------------------ MODE STATIQUE / DYNAMIQUE ------------------
             if mode == "statique":
@@ -246,22 +253,22 @@ def render():
                     conso_real = cur_conso[c]
                     allocated = prod_total * (consumer_percentages.get(c, 0) / 100)
                     # allocate from producers
-                    if allocated > 0:
-                        deducted = _deduct_from_producers(cur_prod, allocated)
-                        prod_total -= deducted
-                    else:
-                        deducted = 0
+                    #if allocated > 0:
+                        #deducted = _deduct_from_producers(cur_prod, allocated)
+                        #prod_total -= deducted
+                    #else:
+                        #deducted = 0
 
-                    if conso_real <= deducted:
+                    if conso_real <= allocated:
                         auto_partage_total[c] += conso_real
                         auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + conso_real
                         # any surplus from this allocated share becomes surplus_total
-                        surplus_total += deducted - conso_real
+                        surplus_total += allocated - conso_real
                         cur_conso[c] = 0
                     else:
-                        auto_partage_total[c] += deducted
-                        auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + deducted
-                        cur_conso[c] -= deducted
+                        auto_partage_total[c] += allocated
+                        auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + allocated
+                        cur_conso[c] -= allocated
                         fourn_compl_total[c] += cur_conso[c]
 
             elif mode == "dynamique_defaut":
@@ -278,18 +285,18 @@ def render():
                         conso_real = cur_conso[c]
                         coef = (conso_real / conso_total) if conso_total > 0 else 0
                         allocated = prod_total * coef
-                        deducted = _deduct_from_producers(cur_prod, allocated)
-                        prod_total -= deducted
+                        #deducted = _deduct_from_producers(cur_prod, allocated)
+                        #prod_total -= deducted
 
-                        if conso_real <= deducted:
+                        if conso_real <= allocated:
                             auto_partage_total[c] += conso_real
                             auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + conso_real
-                            surplus_total += deducted - conso_real
+                            surplus_total += allocated - conso_real
                             cur_conso[c] = 0
                         else:
-                            auto_partage_total[c] += deducted
-                            auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + deducted
-                            cur_conso[c] -= deducted
+                            auto_partage_total[c] += allocated
+                            auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + allocated
+                            cur_conso[c] -= allocated
                             fourn_compl_total[c] += cur_conso[c]
 
             elif mode == "dynamique_simple":
@@ -311,9 +318,7 @@ def render():
                         # Plus de production disponible → tout devient complément
                         for c in members:
                             conso_real = cur_conso[c]
-                            auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + 0
                             fourn_compl_total[c] += conso_real
-                            cur_conso[c] = 0
                         continue
                     
                     group_conso = df_conso.iloc[t][members].sum()
@@ -333,18 +338,18 @@ def render():
                             conso_real = cur_conso[c]
                             allocated = prod_for_group * (group_percentages.get(c, 0) / 100)
                             # deduct from producers
-                            deducted = _deduct_from_producers(cur_prod, allocated)
-                            production_restante -= deducted
+                            #deducted = _deduct_from_producers(cur_prod, allocated)
+                            #production_restante -= deducted
 
-                            if conso_real <= deducted:
+                            if conso_real <= allocated:
                                 auto_partage_total[c] += conso_real
                                 auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + conso_real
-                                surplus_total += deducted - conso_real
+                                surplus_total += allocated - conso_real
                                 cur_conso[c] = 0
                             else:
-                                auto_partage_total[c] += deducted
-                                auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + deducted
-                                cur_conso[c] -= deducted
+                                auto_partage_total[c] += allocated
+                                auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + allocated
+                                cur_conso[c] -= allocated
                                 fourn_compl_total[c] += cur_conso[c]
                     else:
                         # Distribution proportionnelle par consommation
@@ -353,24 +358,24 @@ def render():
                                 conso_real = cur_conso[c]
                                 coef = (conso_real / group_conso) if group_conso > 0 else 0
                                 allocated = prod_for_group * coef
-                                deducted = _deduct_from_producers(cur_prod, allocated)
-                                production_restante -= deducted
+                                #deducted = _deduct_from_producers(cur_prod, allocated)
+                                #production_restante -= deducted
 
-                                if conso_real <= deducted:
+                                if conso_real <= allocated:
                                     auto_partage_total[c] += conso_real
                                     auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + conso_real
-                                    surplus_total += deducted - conso_real
+                                    surplus_total += allocated - conso_real
                                     cur_conso[c] = 0
                                 else:
-                                    auto_partage_total[c] += deducted
-                                    auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + deducted
-                                    cur_conso[c] -= deducted
+                                    auto_partage_total[c] += allocated
+                                    auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + allocated
+                                    cur_conso[c] -= allocated
                                     fourn_compl_total[c] += cur_conso[c]
                         else:
                             # no group consumption -> all prod_for_group becomes surplus
                             surplus_total += prod_for_group
-                            for c in members:
-                                auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + 0
+                            #for c in members:
+                                #auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + 0
 
 
                     production_restante -= prod_for_group
@@ -379,7 +384,7 @@ def render():
                     surplus_total += production_restante
 
             # ==================== Répartition du surplus par producteur ====================
-          
+            
             for p in df_prod.columns:
                 if orig_prod_total > 0:
                     surplus_p = surplus_total * (orig_prod[p] / orig_prod_total)
@@ -390,6 +395,7 @@ def render():
 
                 # Autoproduction réellement consommée = original production - surplus
                 auto_prod_df.loc[df_prod.index[t], p] = orig_prod[p] - surplus_p
+        
         return surplus_prod, auto_partage_total, fourn_compl_total, auto_partage_df, auto_prod_df
     
     # ===============================
@@ -521,13 +527,20 @@ def render():
     # =========================================================
     if not df_conso_selected.empty:
         df_conso_plot = df_conso_selected.copy()
+        df_auto_conso_plot = conso_df[selected_consumers].copy()
 
         n_conso = len(df_conso_plot.columns)
+        n_auto = len(df_auto_conso_plot.columns)
 
         # Palette dynamique
         bleu_palette = pc.sample_colorscale(
             "Blues",
             np.linspace(0.35, 1, max(n_conso, 1))
+        )
+        
+        rouge_palette = pc.sample_colorscale(
+            "Oranges",
+            np.linspace(0.35, 1, max(n_auto, 1))
         )
 
         fig_conso = px.line(
@@ -536,6 +549,19 @@ def render():
             color_discrete_sequence=bleu_palette,
             title="Courbes de Consommation"
         )
+        
+        # Ajout autoproduction (ligne rouge/orange)
+        for i, c in enumerate(df_auto_conso_plot.columns):
+            fig_conso.add_scatter(
+                x=df_auto_conso_plot.index,
+                y=df_auto_conso_plot[c],
+                mode="lines",
+                name=f"{c} (Autoproduite)",
+                line=dict(
+                    color=rouge_palette[i],
+                    width=2
+                )
+            )
 
         fig_conso.update_layout(
             legend_title="",
@@ -557,11 +583,17 @@ def render():
     # =========================================================
     if not df_prod_selected.empty:
         df_prod_plot = df_prod_selected.copy()
+        df_auto_prod_plot = prod_df[df_prod_plot.columns]
 
         n_prod = len(df_prod_plot.columns)
 
         bleu_palette = pc.sample_colorscale(
             "Blues",
+            np.linspace(0.35, 1, max(n_prod, 1))
+        )
+        
+        rouge_palette = pc.sample_colorscale(
+            "Oranges",
             np.linspace(0.35, 1, max(n_prod, 1))
         )
 
@@ -571,6 +603,19 @@ def render():
             color_discrete_sequence=bleu_palette,
             title="Courbes de Production"
         )
+        
+        # Ajout autoproduction consommée
+        for i, p in enumerate(df_auto_prod_plot.columns):
+            fig_prod.add_scatter(
+                x=df_auto_prod_plot.index,
+                y=df_auto_prod_plot[p],
+                mode="lines",
+                name=f"{p} (Autoconsommée)",
+                line=dict(
+                    color=rouge_palette[i],
+                    width=2
+                )
+            )
 
         fig_prod.update_layout(
             legend_title="",
