@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import seaborn as sns
+import math
 import plotly.express as px
 import plotly.colors as pc
 import plotly.graph_objects as go
@@ -183,27 +184,13 @@ def render():
 
         n_rows = min(len(df_prod), len(df_conso))
 
-        # def _deduct_from_producers(cur_prod: dict, amount: float) -> float:
-        #     """Deduct `amount` from producers in-place (largest-first). Returns total actually deducted."""
-        #     if amount <= 0:
-        #         return 0.0
-        #     remaining = amount
-        #     # sort producers by available desc
-        #     for p, avail in sorted(cur_prod.items(), key=lambda x: x[1], reverse=True):
-        #         if remaining <= 0:
-        #             break
-        #         take = min(cur_prod[p], remaining)
-        #         cur_prod[p] -= take
-        #         remaining -= take
-        #     return amount - remaining
-
         for t in range(n_rows):
 
             # Original per-producer production at this timestep
             orig_prod = {p: float(df_prod.iloc[t][p]) for p in df_prod.columns}
             orig_prod_total = sum(orig_prod.values())
 
-            # Current available production (will be decremented when allocated)
+            # Current available production
             cur_prod = {p: float(v) for p, v in orig_prod.items()}
 
             # Current consumer demand (will be decremented when satisfied)
@@ -252,12 +239,6 @@ def render():
                     # remaining demand
                     conso_real = cur_conso[c]
                     allocated = prod_total * (consumer_percentages.get(c, 0) / 100)
-                    # allocate from producers
-                    #if allocated > 0:
-                        #deducted = _deduct_from_producers(cur_prod, allocated)
-                        #prod_total -= deducted
-                    #else:
-                        #deducted = 0
 
                     if conso_real <= allocated:
                         auto_partage_total[c] += conso_real
@@ -276,17 +257,11 @@ def render():
                 if conso_total == 0:
                     # Pas de consommation → tout produit restant devient surplus
                     surplus_total += prod_total
-                    for c in df_conso.columns:
-                        # no additional autoproduction allocated in this phase
-                        pass
-                    # mark remaining production as surplus after loop
                 else:
                     for c in df_conso.columns:
                         conso_real = cur_conso[c]
                         coef = (conso_real / conso_total) if conso_total > 0 else 0
                         allocated = prod_total * coef
-                        #deducted = _deduct_from_producers(cur_prod, allocated)
-                        #prod_total -= deducted
 
                         if conso_real <= allocated:
                             auto_partage_total[c] += conso_real
@@ -337,9 +312,6 @@ def render():
                         for c in members:
                             conso_real = cur_conso[c]
                             allocated = prod_for_group * (group_percentages.get(c, 0) / 100)
-                            # deduct from producers
-                            #deducted = _deduct_from_producers(cur_prod, allocated)
-                            #production_restante -= deducted
 
                             if conso_real <= allocated:
                                 auto_partage_total[c] += conso_real
@@ -358,8 +330,6 @@ def render():
                                 conso_real = cur_conso[c]
                                 coef = (conso_real / group_conso) if group_conso > 0 else 0
                                 allocated = prod_for_group * coef
-                                #deducted = _deduct_from_producers(cur_prod, allocated)
-                                #production_restante -= deducted
 
                                 if conso_real <= allocated:
                                     auto_partage_total[c] += conso_real
@@ -374,8 +344,6 @@ def render():
                         else:
                             # no group consumption -> all prod_for_group becomes surplus
                             surplus_total += prod_for_group
-                            #for c in members:
-                                #auto_partage_df.loc[df_conso.index[t], c] = auto_partage_df.loc[df_conso.index[t], c] + 0
 
 
                     production_restante -= prod_for_group
@@ -418,7 +386,6 @@ def render():
     surplus_dict, auto_dict, compl_dict, conso_df, prod_df = compute_metrics(df_prod, df_conso, mode)
     
     # Donuts de valeurs totales
-    import math
     def safe_round(v):
         if v is None or math.isnan(v):
             return 0
