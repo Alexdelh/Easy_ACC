@@ -33,16 +33,21 @@ def render():
                 Easy ACC ⚡
             </h1>
         """, unsafe_allow_html=True)
-
+        
     with header_right:
-        # Titre Aide
-        st.markdown("""
-            <div style='text-align:right; font-size:20px; margin-top:10px;'>
-                Aide
-            </div>
-        """, unsafe_allow_html=True)
+        # Placeholder pour le bouton Export PDF
+        export_placeholder = st.empty()
+        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+    # with header_right:
+    #     # Titre Aide
+    #     st.markdown("""
+    #         <div style='text-align:right; font-size:20px; margin-top:10px;'>
+    #             Aide
+    #         </div>
+    #     """, unsafe_allow_html=True)
+
+        #st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
         # CSS personnalisé pour les boutons
         st.markdown("""
@@ -70,8 +75,8 @@ def render():
         """, unsafe_allow_html=True)
 
         # Placeholder pour le bouton Export PDF
-        export_placeholder = st.empty()
-        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+        #export_placeholder = st.empty()
+        #st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
     st.markdown("<div style='height:40px;'></div>", unsafe_allow_html=True)
     
@@ -84,7 +89,11 @@ def render():
     if df_prod is None or df_conso is None:
         st.warning("Données de production ou de consommation manquantes.")
         return
-
+    
+    # Remplacement des valeurs 'nan' en 0
+    df_prod = df_prod.fillna(0)
+    df_conso = df_conso.fillna(0)
+    
     # ===============================
     # CALCULS GLOBAUX : Totaux et taux de couverture
     # ===============================
@@ -172,13 +181,13 @@ def render():
         Retourne les DataFrames et dictionnaires de totaux
         """
         # Totaux cumulés
-        surplus_prod = {p: 0 for p in df_prod.columns}
-        auto_partage_total = {c: 0 for c in df_conso.columns}
-        fourn_compl_total = {c: 0 for c in df_conso.columns}
+        surplus_prod = {p: 0.0 for p in df_prod.columns}
+        auto_partage_total = {c: 0.0 for c in df_conso.columns}
+        fourn_compl_total = {c: 0.0 for c in df_conso.columns}
 
         # DataFrames pour courbes temps réel
-        auto_partage_df = pd.DataFrame(0, index=df_conso.index, columns=df_conso.columns)
-        auto_prod_df = pd.DataFrame(0, index=df_prod.index, columns=df_prod.columns)
+        auto_partage_df = pd.DataFrame(0.0, index=df_conso.index, columns=df_conso.columns)
+        auto_prod_df = pd.DataFrame(0.0, index=df_prod.index, columns=df_prod.columns)
 
         consumer_ACI = st.session_state.get("consumer_ACI", {})
 
@@ -200,7 +209,6 @@ def render():
                 # Si aucune production → toute consommation devient complément
                 for c in df_conso.columns:
                     conso_real = cur_conso[c]
-                    auto_partage_df.loc[df_conso.index[t], c] = 0
                     fourn_compl_total[c] += conso_real
                 continue
 

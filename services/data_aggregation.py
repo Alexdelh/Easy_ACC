@@ -280,7 +280,7 @@ def _build_consolidated_dataframe(
 
     # Resample to hourly frequency ONLY if needed
     if df.index.freq != pd.offsets.Hour():
-        df = df.resample("1H").mean()
+        df = df.resample("1h").mean()
     # Otherwise already hourly, no need to resample
 
     # Filter by date range if provided
