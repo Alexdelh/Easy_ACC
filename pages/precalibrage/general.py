@@ -27,7 +27,7 @@ def render():
     
     with col1:
         st.subheader("Configuration du projet")
-        
+
         if "_project_name" not in st.session_state:
             st.session_state["_project_name"] = st.session_state.get("project_name", "")
         st.text_input(
@@ -48,13 +48,27 @@ def render():
             args=("postal_code", "_postal_code")
         )
 
+
+        # Champ pour l'année de référence (juste après le code postal)
+        if "_reference_year" not in st.session_state:
+            import datetime
+            st.session_state["_reference_year"] = st.session_state.get("reference_year", datetime.datetime.now().year)
+        st.number_input(
+            "Année de référence (pour l'alignement calendaire)",
+            min_value=1900,
+            max_value=2100,
+            step=1,
+            key="_reference_year",
+            on_change=auto_save_general_field,
+            args=("reference_year", "_reference_year")
+        )
+
         # Dynamic index for Distance Constraint
         if "_distance_constraint" not in st.session_state:
             val = st.session_state.get("distance_constraint", "2 km")
             if val not in DISTANCE_OPTIONS:
                 val = "2 km"
             st.session_state["_distance_constraint"] = val
-            
         st.selectbox(
             "Distance contrainte",
             DISTANCE_OPTIONS,
@@ -70,7 +84,6 @@ def render():
             if val not in OPERATION_TYPES:
                 val = "Ouverte"
             st.session_state["_operation_type"] = val
-
         st.selectbox(
             "Type d'opération",
             OPERATION_TYPES,
@@ -78,10 +91,8 @@ def render():
             on_change=auto_save_general_field,
             args=("operation_type", "_operation_type")
         )
-        
-        st.divider()       
-        
-            
+
+        st.divider()
     with col2:
         st.subheader("Localisation du projet")
 

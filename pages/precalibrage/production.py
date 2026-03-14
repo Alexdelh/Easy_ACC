@@ -736,12 +736,35 @@ def render():
                     azimuth = st.number_input("Azimut (°)", min_value=0.0, max_value=360.0, step=1.0, value=0.0, format="%.0f")
                     losses = st.number_input("Pertes système (%)", min_value=0.0, max_value=50.0, step=0.5, value=14.0, format="%.1f")
 
-                    start_date = st.session_state.get("start_date")
-                    end_date = st.session_state.get("end_date")
+                    # Utiliser l'année de référence si aucune période n'est configurée
+
+                    # Forcer systématiquement la période PVGIS à l'année de référence
+                    reference_year = st.session_state.get("reference_year")
+                    import datetime
+                    if reference_year is not None:
+                        start_date = datetime.date(int(reference_year), 1, 1)
+                        end_date = datetime.date(int(reference_year), 12, 31)
+                    else:
+                        start_date = datetime.date(datetime.datetime.now().year, 1, 1)
+                        end_date = datetime.date(datetime.datetime.now().year, 12, 31)
+
+
+                    import datetime
+                    def to_date(val):
+                        if isinstance(val, str):
+                            try:
+                                return datetime.datetime.strptime(val, "%Y-%m-%d").date()
+                            except Exception:
+                                return datetime.datetime.strptime(val, "%Y-%m-%d %H:%M:%S").date()
+                        elif isinstance(val, datetime.datetime):
+                            return val.date()
+                        return val
 
                     if start_date and end_date:
-                        duration_days = (end_date - start_date).days
-                        st.info(f"📅 Période configurée : {start_date.strftime('%d/%m/%Y')} → {end_date.strftime('%d/%m/%Y')} ({duration_days} jours)")
+                        start_date_dt = to_date(start_date)
+                        end_date_dt = to_date(end_date)
+                        duration_days = (end_date_dt - start_date_dt).days
+                        st.info(f"📅 Période configurée : {start_date_dt.strftime('%d/%m/%Y')} → {end_date_dt.strftime('%d/%m/%Y')} ({duration_days} jours)")
                     else:
                         st.warning("⚠️ Configurez les dates dans 'Infos générales' d'abord")
 
