@@ -104,6 +104,7 @@ def _is_data_row(row: pd.Series) -> bool:
         return False
 
 def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]:
+        
     cols = df.columns.tolist()
     cols_lower = [str(c).lower() for c in cols]
 
@@ -119,6 +120,19 @@ def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]
     if "datetime" in cols_lower and any(x in cols_lower for x in ["w", "kw", "value"]):
         val_idx = [i for i, c in enumerate(cols_lower) if c in ["w", "kw", "value"]][0]
         return cols[cols_lower.index("datetime")], cols[val_idx], "ALEX"
+    
+    # PVGIS
+    
+    if df.shape[1] == 2:
+        first_col = df.iloc[:, 0].astype(str)
+
+        pattern = r"^\d{8}:\d{4}$"
+
+        # on regarde les premières lignes
+        sample = first_col.head(10)
+
+        if sample.str.match(pattern).all():
+            return cols[0], cols[1], "PVGIS"
 
     # Fallback / Archelios / Headerless
     dt_col, val_col = None, None

@@ -16,29 +16,45 @@ def align_curve_to_reference_year(df: pd.DataFrame, reference_year: int) -> pd.D
     """
 
 
-    # Recherche automatique d'une plage couvrant une année civile complète
-    # On cherche pour chaque année présente dans les données
-    years = sorted(set(df.index.year))
-    found = False
-    for y in years:
-        # On accepte un début à 00:00 ou 01:00
-        for h in [0, 1]:
-            start_candidate = pd.Timestamp(f"{y}-01-01 {h:02d}:00:00")
-            end_candidate = pd.Timestamp(f"{y}-12-31 23:00:00")
-            if start_candidate in df.index and end_candidate in df.index:
-                # On vérifie qu'on a bien toutes les heures entre les deux
-                expected_hours = (end_candidate - start_candidate).total_seconds() // 3600 + 1
-                df_sub = df.loc[start_candidate:end_candidate]
-                if len(df_sub) == expected_hours:
-                    df = df_sub.copy()
-                    found = True
-                    break
-        if found:
-            break
-    if not found:
+    # Recherche d'une plage de 364 jours consécutifs (8736 heures)
+    # On cherche la plus longue séquence continue d'heures sans trou
+    df_sorted = df.sort_index()
+    # On crée une série d'heures attendues à partir de la première à la dernière date
+    full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='H')
+    # On repère les plages continues
+    mask = df_sorted.index.isin(full_range)
+    # On réindexe pour avoir les NaN là où il manque des heures
+    df_full = df_sorted.reindex(full_range)
+    # On cherche la plus longue séquence sans NaN
+    max_len = 0
+    best_start = None
+    best_end = None
+    current_start = None
+    current_len = 0
+    for ts, val in df_full['value'].items():
+        if not pd.isna(val):
+            if current_start is None:
+                current_start = ts
+                current_len = 1
+            else:
+                current_len += 1
+            if current_len > max_len:
+                max_len = current_len
+                best_start = current_start
+                best_end = ts
+        else:
+            current_start = None
+            current_len = 0
+    # On accepte si on trouve au moins 8736 heures consécutives (364 jours)
+    if max_len < 8736:
         raise CalendarAlignmentError(
-            "Aucune plage complète du 1er janvier à 00:00/01:00 au 31 décembre 23:00 trouvée dans les données importées."
+            f"Aucune plage de 364 jours consécutifs (8736h) trouvée dans les données importées. Max trouvé : {max_len}h."
         )
+    # On tronque à la première plage valide trouvée
+    df = df_full.loc[best_start:best_end].copy()
+    # Si plus long que 8736h, on tronque à 8736h
+    if len(df) > 8736:
+        df = df.iloc[:8736]
 
     # On effectue l'alignement calendaire AVANT de supprimer le dernier jour pour les années bissextiles
     is_leap = (df.index[0].year % 4 == 0 and (df.index[0].year % 100 != 0 or df.index[0].year % 400 == 0))

@@ -1013,6 +1013,9 @@ def render():
             try:
                 dfs = []
                 reference_year = st.session_state.get("reference_year")
+                plages_valides = []
+                noms_valides = []
+                courbes_valides = []
                 for p in points:
                     if p.get("active", True):
                         courbe = p.get("courbe_production")
@@ -1023,7 +1026,6 @@ def render():
                             df = courbe
                         else:
                             continue
-                        # On prend uniquement les colonnes datetime (index) et value
                         if not isinstance(df.index, pd.DatetimeIndex):
                             if "datetime" in df.columns:
                                 df = df.set_index("datetime")
@@ -1031,26 +1033,65 @@ def render():
                             continue
                         if "value" not in df.columns:
                             continue
-
-                        # Détection et stockage de l'année de référence
-                        if reference_year is None:
-                            reference_year = df.index[0].year
-                            st.session_state["reference_year"] = reference_year
-
-                        # Alignement calendaire
-                        try:
-                            df_aligned = align_curve_to_reference_year(df, reference_year)
-                        except CalendarAlignmentError as err:
-                            st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
-                            continue
-                        # On ne garde que la colonne value, et on la renomme par le nom du producteur
-                        dfs.append(df_aligned[["value"]].rename(columns={"value": nom}))
-
-                if dfs:
-                    df_prod = pd.concat(dfs, axis=1)
-                    st.session_state["df_prod"] = df_prod
-                    st.dataframe(df_prod, use_container_width=True)
-                    st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
+                        # Recherche de la plus longue plage consécutive >= 8736h
+                        df_sorted = df.sort_index()
+                        full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='H')
+                        df_full = df_sorted.reindex(full_range)
+                        max_len = 0
+                        best_start = None
+                        best_end = None
+                        current_start = None
+                        current_len = 0
+                        for ts, val in df_full['value'].items():
+                            if not pd.isna(val):
+                                if current_start is None:
+                                    current_start = ts
+                                    current_len = 1
+                                else:
+                                    current_len += 1
+                                if current_len > max_len:
+                                    max_len = current_len
+                                    best_start = current_start
+                                    best_end = ts
+                            else:
+                                current_start = None
+                                current_len = 0
+                        if max_len >= 8736:
+                            plages_valides.append((best_start, best_end))
+                            noms_valides.append(nom)
+                            courbes_valides.append(df_full)
+                        else:
+                            st.error(f"{nom} : courbe trop courte (max {max_len}h consécutives, minimum requis : 8736h)")
+                # Déterminer la plage commune maximale (intersection)
+                if plages_valides:
+                    plage_debut = max([p[0] for p in plages_valides])
+                    plage_fin = min([p[1] for p in plages_valides])
+                    if (plage_fin - plage_debut).total_seconds() / 3600 + 1 >= 8736:
+                        for i, df_full in enumerate(courbes_valides):
+                            nom = noms_valides[i]
+                            df_crop = df_full.loc[plage_debut:plage_fin].copy()
+                            if len(df_crop) > 8736:
+                                df_crop = df_crop.iloc[:8736]
+                            # Détection et stockage de l'année de référence
+                            if reference_year is None:
+                                reference_year = df_crop.index[0].year
+                                st.session_state["reference_year"] = reference_year
+                            # Alignement calendaire
+                            try:
+                                df_aligned = align_curve_to_reference_year(df_crop, reference_year)
+                            except CalendarAlignmentError as err:
+                                st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
+                                continue
+                            dfs.append(df_aligned[["value"]].rename(columns={"value": nom}))
+                        if dfs:
+                            df_prod = pd.concat(dfs, axis=1)
+                            st.session_state["df_prod"] = df_prod
+                            st.dataframe(df_prod, use_container_width=True)
+                            st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
+                        else:
+                            st.warning("⚠️ Aucun point d'injection actif avec des données valides.")
+                    else:
+                        st.warning("⚠️ Pas de plage commune d'au moins 8736h entre les courbes retenues.")
                 else:
                     # Reset du DataFrame dans le state
                     df_prod = None  # vide
