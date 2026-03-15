@@ -1,12 +1,13 @@
 
 import pandas as pd
+import numpy as np
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
 from utils.helpers import get_coordinates_from_postal_code
 from services.geolocation import get_coordinates_from_address
 from services.curve_processing import process_curve
-from services.curve_processing.alignment import align_curve_to_reference_year, CalendarAlignmentError
+from services.curve_processing.alignment import align_curve_to_reference_year, CalendarAlignmentError, find_max_common_calendar_range
 import html
 import re
 from geopy.distance import geodesic
@@ -803,10 +804,42 @@ def render():
             st.info("Aucun point à afficher. Ajoutez des points d'injection ou de soutirage.")
         else:
             col_legend1, col_legend2, col_legend3, col_legend4 = st.columns(4)
+            def _has_valid_curve_conso(p):
+                """Retourne True si le point a une courbe consommation avec au moins 8736h consécutives."""
+                courbe = p.get("courbe_consommation")
+                if isinstance(courbe, dict) and "df" in courbe:
+                    df = courbe["df"]
+                elif isinstance(courbe, pd.DataFrame):
+                    df = courbe
+                else:
+                    return False
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    if "datetime" in df.columns:
+                        df = df.set_index("datetime")
+                if not isinstance(df.index, pd.DatetimeIndex) or "value" not in df.columns:
+                    return False
+                df_sorted = df.sort_index()
+                src_year = df_sorted.index[0].year
+                full_range = pd.date_range(start=f"{src_year}-01-01 00:00:00", end=f"{src_year}-12-31 23:00:00", freq='H')
+                df_full = df_sorted.reindex(full_range)
+                max_len = 0
+                current_len = 0
+                for val in df_full['value']:
+                    if not pd.isna(val):
+                        current_len += 1
+                        max_len = max(max_len, current_len)
+                    else:
+                        current_len = 0
+                return max_len >= 8736
+
             with col_legend1:
-                st.metric("Points d'injection", len(points_injection))
+                active_inj_count = sum(1 for p in points_injection if p.get("active", True))
+                st.metric("Points d'injection", active_inj_count)
             with col_legend2:
-                st.metric("Points de soutirage", len(points_soutirage))
+                active_conso_valid_count = sum(
+                    1 for p in points_soutirage if p.get("active", True) and _has_valid_curve_conso(p)
+                )
+                st.metric("Points de soutirage", active_conso_valid_count)
             with col_legend3:
                 distance_constraint_str = st.session_state.get("distance_constraint", "2 km")
                 st.metric("Contrainte de distance", distance_constraint_str)
@@ -899,7 +932,14 @@ def render():
                             continue
                         # Recherche de la plus longue plage consécutive >= 8736h
                         df_sorted = df.sort_index()
-                        full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='H')
+                        # Toujours étendre sur l'année source complète (01/01 00:00 → 31/12 23:00)
+                        # pour que les heures supprimées à l'import soient présentes avec NaN
+                        src_year = df_sorted.index[0].year
+                        full_range = pd.date_range(
+                            start=f"{src_year}-01-01 00:00:00",
+                            end=f"{src_year}-12-31 23:00:00",
+                            freq='H'
+                        )
                         df_full = df_sorted.reindex(full_range)
                         max_len = 0
                         best_start = None
@@ -926,36 +966,139 @@ def render():
                             courbes_valides.append(df_full)
                         else:
                             st.error(f"{nom} : courbe trop courte (max {max_len}h consécutives, minimum requis : 8736h)")
-                # Déterminer la plage commune maximale (intersection)
-                if plages_valides:
-                    plage_debut = max([p[0] for p in plages_valides])
-                    plage_fin = min([p[1] for p in plages_valides])
-                    if (plage_fin - plage_debut).total_seconds() / 3600 + 1 >= 8736:
-                        for i, df_full in enumerate(courbes_valides):
-                            nom = noms_valides[i]
-                            df_crop = df_full.loc[plage_debut:plage_fin].copy()
-                            if len(df_crop) > 8736:
-                                df_crop = df_crop.iloc[:8736]
-                            # Détection et stockage de l'année de référence
-                            if reference_year is None:
-                                reference_year = df_crop.index[0].year
-                                st.session_state["reference_year"] = reference_year
-                            # Alignement calendaire
+                if courbes_valides:
+                    if len(courbes_valides) == 1:
+                        # Un seul consommateur : pas d'intersection, juste alignement
+                        nom = noms_valides[0]
+                        df_full = courbes_valides[0]
+                        if not isinstance(df_full.index, pd.DatetimeIndex):
                             try:
-                                df_aligned = align_curve_to_reference_year(df_crop, reference_year)
+                                df_full.index = pd.to_datetime(df_full.index)
+                            except Exception as e:
+                                st.error(f"Impossible de convertir l'index en DatetimeIndex : {e}")
+                                df_conso = None
+                                st.session_state["df_conso"] = df_conso
+                                return
+                        if reference_year is None:
+                            reference_year = df_full.index[0].year
+                            st.session_state["reference_year"] = reference_year
+
+                        # Index cible : année de référence sans 29 fév si bissextile
+                        is_leap_ref = (reference_year % 4 == 0 and (reference_year % 100 != 0 or reference_year % 400 == 0))
+                        target_index = pd.date_range(start=f"{reference_year}-01-01 00:00:00", end=f"{reference_year}-12-31 23:00:00", freq="H")
+                        if is_leap_ref:
+                            target_index = target_index[~((target_index.month == 2) & (target_index.day == 29))]
+
+                        start = df_full.index.min()
+                        if start.year == reference_year:
+                            df_aligned = df_full.reindex(target_index)
+                        else:
+                            try:
+                                df_aligned = align_curve_to_reference_year(df_full, reference_year)
+                                df_aligned = df_aligned.reindex(target_index)
                             except CalendarAlignmentError as err:
                                 st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
-                                continue
-                            dfs.append(df_aligned[["value"]].rename(columns={"value": nom}))
-                        if dfs:
-                            df_conso = pd.concat(dfs, axis=1)
-                            st.session_state["df_conso"] = df_conso
-                            st.dataframe(df_conso, use_container_width=True)
+                                df_conso = None
+                                st.session_state["df_conso"] = df_conso
+                                return
+
+                        missing_datetimes = [dt for dt in target_index if pd.isna(df_aligned.loc[dt, 'value'])]
+                        missing_count = len(missing_datetimes)
+                        df_crop = df_aligned.copy()
+                        if missing_count > 0:
+                            st.warning(f"{nom} : {missing_count} heure(s) manquante(s) sur l'année civile {reference_year}. Heures manquantes : {[dt.strftime('%d/%m %Hh') for dt in missing_datetimes[:10]]}{' ...' if len(missing_datetimes)>10 else ''}")
+                            option = st.selectbox(
+                                f"Comment remplir les {missing_count} valeurs manquantes pour {nom} ?",
+                                ["Laisser manquant (NaN)", "Remplir par zéro", "Saisir manuellement"],
+                                key=f"missing_option_{nom}"
+                            )
+                            if option == "Remplir par zéro":
+                                for dt in missing_datetimes:
+                                    df_crop.loc[dt, "value"] = 0.0
+                                df_crop = df_crop.sort_index()
+                            elif option == "Saisir manuellement":
+                                manual_vals = {}
+                                for dt in missing_datetimes:
+                                    val = st.number_input(f"{nom} - {dt.strftime('%d/%m %Hh')}", min_value=0.0, step=0.1, key=f"manual_{nom}_{dt}")
+                                    manual_vals[dt] = val
+                                for dt, val in manual_vals.items():
+                                    df_crop.loc[dt, "value"] = val
+                                df_crop = df_crop.sort_index()
+                        df_named = df_crop[["value"]].rename(columns={"value": nom})
+                        if not isinstance(df_named.index, pd.DatetimeIndex):
+                            df_named.index = pd.to_datetime(df_named.index)
+                        st.session_state["df_conso"] = df_named
+                        if df_named is not None and not df_named.empty:
+                            st.dataframe(df_named, use_container_width=True)
                             st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
                         else:
-                            st.warning("⚠️ Aucun point de soutirage actif avec des données valides.")
+                            st.warning("⚠️ DataFrame vide après traitement.")
                     else:
-                        st.warning("⚠️ Pas de plage commune d'au moins 8736h entre les courbes retenues.")
+                        # Plusieurs consommateurs : intersection calendaire
+                        best_start, best_end, mask_dict = find_max_common_calendar_range(courbes_valides)
+                        if best_start is not None and best_end is not None:
+                            reference_year = st.session_state.get("reference_year")
+                            if reference_year is None:
+                                reference_year = courbes_valides[0].index[0].year
+                                st.session_state["reference_year"] = reference_year
+                            is_leap_ref = (reference_year % 4 == 0 and (reference_year % 100 != 0 or reference_year % 400 == 0))
+                            target_index = pd.date_range(start=f"{reference_year}-01-01 00:00:00", end=f"{reference_year}-12-31 23:00:00", freq="H")
+                            if is_leap_ref:
+                                target_index = target_index[~((target_index.month == 2) & (target_index.day == 29))]
+                            for i, df_full in enumerate(courbes_valides):
+                                nom = noms_valides[i]
+                                mask = mask_dict[i]
+                                df_crop = df_full[mask].copy()
+                                missing_datetimes = [dt for dt in target_index if dt not in df_crop.index or pd.isna(df_crop.loc[dt, 'value'] if dt in df_crop.index else np.nan)]
+                                missing_count = len(missing_datetimes)
+                                if missing_count > 0:
+                                    st.warning(f"{nom} : {missing_count} heure(s) manquante(s) sur l'année civile. Heures manquantes : {[dt.strftime('%d/%m %Hh') for dt in missing_datetimes[:10]]}{' ...' if len(missing_datetimes)>10 else ''}")
+                                    option = st.selectbox(
+                                        f"Comment remplir les {missing_count} valeurs manquantes pour {nom} ?",
+                                        ["Laisser manquant (NaN)", "Remplir par zéro", "Saisir manuellement"],
+                                        key=f"missing_option_{nom}"
+                                    )
+                                    if option == "Remplir par zéro":
+                                        for dt in missing_datetimes:
+                                            df_crop.loc[dt, "value"] = 0.0
+                                        df_crop = df_crop.sort_index()
+                                    elif option == "Saisir manuellement":
+                                        manual_vals = {}
+                                        for dt in missing_datetimes:
+                                            val = st.number_input(f"{nom} - {dt.strftime('%d/%m %Hh')}", min_value=0.0, step=0.1, key=f"manual_{nom}_{dt}")
+                                            manual_vals[dt] = val
+                                        for dt, val in manual_vals.items():
+                                            df_crop.loc[dt, "value"] = val
+                                        df_crop = df_crop.sort_index()
+                                # Reindex direct si même année, sinon alignement calendaire
+                                src_year_crop = df_crop.index[0].year if len(df_crop) > 0 else None
+                                if src_year_crop == reference_year:
+                                    df_aligned = df_crop.reindex(target_index)
+                                else:
+                                    try:
+                                        df_aligned = align_curve_to_reference_year(df_crop, reference_year)
+                                        df_aligned = df_aligned.reindex(target_index)
+                                    except CalendarAlignmentError as err:
+                                        st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
+                                        continue
+                                df_named = df_aligned[["value"]].rename(columns={"value": nom})
+                                if not isinstance(df_named.index, pd.DatetimeIndex):
+                                    df_named.index = pd.to_datetime(df_named.index)
+                                dfs.append(df_named)
+                            if dfs:
+                                if len(dfs) == 1:
+                                    df_conso = dfs[0]
+                                    if df_conso.columns[0] != noms_valides[0]:
+                                        df_conso.columns = [noms_valides[0]]
+                                else:
+                                    df_conso = pd.concat(dfs, axis=1)
+                                st.session_state["df_conso"] = df_conso
+                                st.dataframe(df_conso, use_container_width=True)
+                                st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
+                            else:
+                                st.warning("⚠️ Aucun point de soutirage actif avec des données valides.")
+                        else:
+                            st.warning("⚠️ Pas de plage calendaire commune entre les courbes retenues.")
                 else:
                     df_conso = None
                     st.session_state["df_conso"] = df_conso

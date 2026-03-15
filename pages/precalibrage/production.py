@@ -2,12 +2,13 @@
 import streamlit as st
 import folium
 import pandas as pd
+import numpy as np
 from streamlit_folium import st_folium
 from utils.helpers import get_coordinates_from_postal_code
 from services.geolocation import get_coordinates_from_address
 from services.pvgis import compute_pv_curve
 from services.curve_processing import process_curve
-from services.curve_processing.alignment import align_curve_to_reference_year, CalendarAlignmentError
+from services.curve_processing.alignment import align_curve_to_reference_year, CalendarAlignmentError, find_max_common_calendar_range
 import html
 import re
 import logging
@@ -949,12 +950,42 @@ def render():
 
         points = st.session_state["points_injection"]
 
+        def _has_valid_curve(p):
+            """Retourne True si le point a une courbe avec au moins 8736h consécutives."""
+            courbe = p.get("courbe_production")
+            if isinstance(courbe, dict) and "df" in courbe:
+                df = courbe["df"]
+            elif isinstance(courbe, pd.DataFrame):
+                df = courbe
+            else:
+                return False
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if "datetime" in df.columns:
+                    df = df.set_index("datetime")
+            if not isinstance(df.index, pd.DatetimeIndex) or "value" not in df.columns:
+                return False
+            df_sorted = df.sort_index()
+            full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='H')
+            df_full = df_sorted.reindex(full_range)
+            max_len = 0
+            current_len = 0
+            for val in df_full['value']:
+                if not pd.isna(val):
+                    current_len += 1
+                    max_len = max(max_len, current_len)
+                else:
+                    current_len = 0
+            return max_len >= 8736
+
         if len(points) == 0:
             st.info("Aucun point d'injection à afficher. Ajoutez des points dans l'onglet 'Gestion des points'.")
         else:
             col_legend1, col_legend2, col_legend3 = st.columns(3)
             with col_legend1:
-                st.metric("Points d'injection", len(points))
+                active_valid_count = sum(
+                    1 for p in points if p.get("active", True) and _has_valid_curve(p)
+                )
+                st.metric("Points d'injection", active_valid_count)
             with col_legend2:
                 distance_constraint_str = st.session_state.get("distance_constraint", "2 km")
                 st.metric("Contrainte de distance", distance_constraint_str)
@@ -1035,7 +1066,16 @@ def render():
                             continue
                         # Recherche de la plus longue plage consécutive >= 8736h
                         df_sorted = df.sort_index()
-                        full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='H')
+                        # Toujours étendre sur l'année source complète (01/01 00:00 → 31/12 23:00)
+                        # pour que les heures supprimées à l'import (ex: 01/01 00:00) soient
+                        # présentes dans l'index avec NaN, et non absentes.
+                        src_year = df_sorted.index[0].year
+                        src_is_leap = (src_year % 4 == 0 and (src_year % 100 != 0 or src_year % 400 == 0))
+                        full_range = pd.date_range(
+                            start=f"{src_year}-01-01 00:00:00",
+                            end=f"{src_year}-12-31 23:00:00",
+                            freq='H'
+                        )
                         df_full = df_sorted.reindex(full_range)
                         max_len = 0
                         best_start = None
@@ -1062,39 +1102,149 @@ def render():
                             courbes_valides.append(df_full)
                         else:
                             st.error(f"{nom} : courbe trop courte (max {max_len}h consécutives, minimum requis : 8736h)")
-                # Déterminer la plage commune maximale (intersection)
-                if plages_valides:
-                    plage_debut = max([p[0] for p in plages_valides])
-                    plage_fin = min([p[1] for p in plages_valides])
-                    if (plage_fin - plage_debut).total_seconds() / 3600 + 1 >= 8736:
-                        for i, df_full in enumerate(courbes_valides):
-                            nom = noms_valides[i]
-                            df_crop = df_full.loc[plage_debut:plage_fin].copy()
-                            if len(df_crop) > 8736:
-                                df_crop = df_crop.iloc[:8736]
-                            # Détection et stockage de l'année de référence
-                            if reference_year is None:
-                                reference_year = df_crop.index[0].year
-                                st.session_state["reference_year"] = reference_year
-                            # Alignement calendaire
+                # --- NOUVELLE LOGIQUE ---
+                if courbes_valides:
+                    if len(courbes_valides) == 1:
+                        # Un seul producteur : pas d'intersection, juste alignement
+                        nom = noms_valides[0]
+                        df_full = courbes_valides[0]
+                        # Forcer l'index en DatetimeIndex si besoin
+                        if not isinstance(df_full.index, pd.DatetimeIndex):
                             try:
-                                df_aligned = align_curve_to_reference_year(df_crop, reference_year)
+                                df_full.index = pd.to_datetime(df_full.index)
+                            except Exception as e:
+                                st.error(f"Impossible de convertir l'index en DatetimeIndex : {e}")
+                                return
+                        if reference_year is None:
+                            reference_year = df_full.index[0].year
+                            st.session_state["reference_year"] = reference_year
+
+                        # Générer l'index cible pour l'année de référence, sans 29 février si bissextile
+                        is_leap_ref = (reference_year % 4 == 0 and (reference_year % 100 != 0 or reference_year % 400 == 0))
+                        target_index = pd.date_range(start=f"{reference_year}-01-01 00:00:00", end=f"{reference_year}-12-31 23:00:00", freq="H")
+                        if is_leap_ref:
+                            target_index = target_index[~((target_index.month == 2) & (target_index.day == 29))]
+
+                        start = df_full.index.min()
+                        if start.year == reference_year:
+                            # Même année : reindex direct, pas d'alignement par semaine
+                            df_aligned = df_full.reindex(target_index)
+                        else:
+                            # Année différente : alignement calendaire
+                            try:
+                                df_aligned = align_curve_to_reference_year(df_full, reference_year)
+                                df_aligned = df_aligned.reindex(target_index)
                             except CalendarAlignmentError as err:
                                 st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
-                                continue
-                            dfs.append(df_aligned[["value"]].rename(columns={"value": nom}))
-                        if dfs:
-                            df_prod = pd.concat(dfs, axis=1)
-                            st.session_state["df_prod"] = df_prod
-                            st.dataframe(df_prod, use_container_width=True)
+                                df_prod = None
+                                st.session_state["df_prod"] = df_prod
+                                return
+                        # Calculer les heures manquantes sur la courbe alignée
+                        # Les valeurs manquantes sont les NaN de la courbe alignée sur l'index cible
+                        missing_datetimes = [dt for dt in target_index if pd.isna(df_aligned.loc[dt, 'value'])]
+                        missing_count = len(missing_datetimes)
+                        df_crop = df_aligned.copy()
+                        if missing_count > 0:
+                            st.warning(f"{nom} : {missing_count} heure(s) manquante(s) sur l'année civile {reference_year}. Heures manquantes : {[dt.strftime('%d/%m %Hh') for dt in missing_datetimes[:10]]}{' ...' if len(missing_datetimes)>10 else ''}")
+                            option = st.selectbox(
+                                f"Comment remplir les {missing_count} valeurs manquantes pour {nom} ?",
+                                ["Laisser manquant (NaN)", "Remplir par zéro", "Saisir manuellement"],
+                                key=f"missing_option_{nom}"
+                            )
+                            if option == "Remplir par zéro":
+                                for dt in missing_datetimes:
+                                    df_crop.loc[dt, "value"] = 0.0
+                                df_crop = df_crop.sort_index()
+                            elif option == "Saisir manuellement":
+                                manual_vals = {}
+                                for dt in missing_datetimes:
+                                    val = st.number_input(f"{nom} - {dt.strftime('%d/%m %Hh')}", min_value=0.0, step=0.1, key=f"manual_{nom}_{dt}")
+                                    manual_vals[dt] = val
+                                for dt, val in manual_vals.items():
+                                    df_crop.loc[dt, "value"] = val
+                                df_crop = df_crop.sort_index()
+                            # Si "Laisser manquant (NaN)", ne rien faire, les NaN restent affichés
+                        df_named = df_crop[["value"]].rename(columns={"value": nom})
+                        if not isinstance(df_named.index, pd.DatetimeIndex):
+                            df_named.index = pd.to_datetime(df_named.index)
+                        st.session_state["df_prod"] = df_named
+                        if df_named is not None and not df_named.empty:
+                            st.dataframe(df_named, use_container_width=True)
                             st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
                         else:
-                            st.warning("⚠️ Aucun point d'injection actif avec des données valides.")
+                            st.warning("⚠️ DataFrame vide après traitement.")
                     else:
-                        st.warning("⚠️ Pas de plage commune d'au moins 8736h entre les courbes retenues.")
+                        # Plusieurs producteurs : intersection calendaire
+                        best_start, best_end, mask_dict = find_max_common_calendar_range(courbes_valides)
+                        if best_start is not None and best_end is not None:
+                            reference_year = st.session_state.get("reference_year")
+                            if reference_year is None:
+                                reference_year = courbes_valides[0].index[0].year
+                                st.session_state["reference_year"] = reference_year
+                            for i, df_full in enumerate(courbes_valides):
+                                nom = noms_valides[i]
+                                mask = mask_dict[i]
+                                df_crop = df_full[mask].copy()
+                                missing_count = 8760 - len(df_crop)
+                                missing_datetimes = []
+                                if missing_count > 0:
+                                    ref_year = reference_year
+                                    target_index = pd.date_range(start=f"{ref_year}-01-01 00:00:00", end=f"{ref_year}-12-31 23:00:00", freq="H")
+                                    df_crop = df_crop.copy()
+                                    missing_datetimes = [dt for dt in target_index if dt not in df_crop.index]
+                                    st.warning(f"{nom} : {missing_count} heure(s) manquante(s) sur l'année civile. Heures manquantes : {[dt.strftime('%d/%m %Hh') for dt in missing_datetimes[:10]]}{' ...' if len(missing_datetimes)>10 else ''}")
+                                    option = st.selectbox(
+                                        f"Comment remplir les {missing_count} valeurs manquantes pour {nom} ?",
+                                        ["Laisser manquant (NaN)", "Remplir par zéro", "Saisir manuellement"],
+                                        key=f"missing_option_{nom}"
+                                    )
+                                    if option == "Remplir par zéro":
+                                        for dt in missing_datetimes:
+                                            df_crop.loc[dt, "value"] = 0.0
+                                        df_crop = df_crop.sort_index()
+                                    elif option == "Saisir manuellement":
+                                        manual_vals = {}
+                                        for dt in missing_datetimes:
+                                            val = st.number_input(f"{nom} - {dt.strftime('%d/%m %Hh')}", min_value=0.0, step=0.1, key=f"manual_{nom}_{dt}")
+                                            manual_vals[dt] = val
+                                        for dt, val in manual_vals.items():
+                                            df_crop.loc[dt, "value"] = val
+                                        df_crop = df_crop.sort_index()
+                                    # Si "Laisser manquant (NaN)", ne rien faire
+                                # Reindex direct si même année, sinon alignement calendaire
+                                src_year_crop = df_crop.index[0].year if len(df_crop) > 0 else None
+                                if src_year_crop == reference_year:
+                                    df_aligned = df_crop.reindex(target_index)
+                                else:
+                                    try:
+                                        df_aligned = align_curve_to_reference_year(df_crop, reference_year)
+                                        df_aligned = df_aligned.reindex(target_index)
+                                    except CalendarAlignmentError as err:
+                                        st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
+                                        continue
+                                df_named = df_aligned[["value"]].rename(columns={"value": nom})
+                                if not isinstance(df_named.index, pd.DatetimeIndex):
+                                    df_named.index = pd.to_datetime(df_named.index)
+                                dfs.append(df_named)
+                            if dfs:
+                                if len(dfs) == 1:
+                                    df_prod = dfs[0]
+                                    if df_prod.columns[0] != noms_valides[0]:
+                                        df_prod.columns = [noms_valides[0]]
+                                else:
+                                    df_prod = pd.concat(dfs, axis=1)
+                                st.session_state["df_prod"] = df_prod
+                                if df_prod is not None and not df_prod.empty:
+                                    st.dataframe(df_prod, use_container_width=True)
+                                    st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
+                                else:
+                                    st.warning("⚠️ DataFrame vide après traitement.")
+                            else:
+                                st.warning("⚠️ Aucun point d'injection actif avec des données valides.")
+                        else:
+                            st.warning("⚠️ Pas de plage calendaire commune entre les courbes retenues.")
                 else:
-                    # Reset du DataFrame dans le state
-                    df_prod = None  # vide
+                    df_prod = None
                     st.session_state["df_prod"] = df_prod
                     st.warning("⚠️ Aucun point d'injection actif avec des données valides.")
             except Exception as e:

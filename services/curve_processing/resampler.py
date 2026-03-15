@@ -44,9 +44,8 @@ def resample_curve(
         method = "aggregate" if target_min >= source_min else "interpolate"
 
     if method == "aggregate":
-        resampled = df.resample(target_freq).agg({"value": "sum"})
+        resampled = df.resample(target_freq).agg({"value": lambda x: x.sum(min_count=1)})
     else:
         resampled = df.resample(target_freq)["value"].interpolate(method="linear").to_frame()
 
-    resampled = resampled.fillna(0)
     return resampled, f"Resampled {source_timestep} → {target_timestep} ({method})"

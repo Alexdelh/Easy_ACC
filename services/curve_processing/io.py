@@ -7,6 +7,7 @@ import numpy as np
 import io
 import re
 from typing import Tuple, Dict, Any, Optional
+import streamlit as st
 
 def read_curve(file_or_df: Any) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     metadata: Dict[str, Any] = {
@@ -55,6 +56,15 @@ def read_curve(file_or_df: Any) -> Tuple[pd.DataFrame, Dict[str, Any]]:
 
     metadata["detected_format"] = fmt
     df = raw_df.copy()
+    try:
+        st.info(f"Format détecté : {fmt}")
+    except ImportError:
+        pass
+    if fmt == "Generic":
+        try:
+            st.warning(f"Format de courbe non reconnu, parsing générique appliqué pour le fichier : {metadata['source_file']}. Vérifiez le résultat.")
+        except ImportError:
+            pass
 
     # 3. Nettoyage spécifique par format (SGE)
     if fmt == "SGE":
@@ -64,7 +74,25 @@ def read_curve(file_or_df: Any) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         elif "Grandeur physique" in df.columns:
             df = df[df["Grandeur physique"] == "PA"]
 
-    # 4. Extraction et conversion
+    # 3b. Traitement spécifique PVGIS
+    if fmt == "PVGIS":
+        df = df[[dt_col, val_col]].copy()
+        df.columns = ["datetime", "value"]
+        # Parsing datetime au format PVGIS
+        df["datetime"] = pd.to_datetime(df["datetime"], format="%Y%m%d:%H%M", errors="coerce")
+        df = df[df["datetime"].notna()]
+        # Parsing valeur (virgule ou point)
+        df["value"] = df["value"].astype(str).str.replace(",", ".").apply(pd.to_numeric, errors="coerce")
+        df = df[df["value"].notna()]
+        # Normalisation en kW
+        df["value"] = df["value"] / 1000.0
+        metadata["unit"] = "kW"
+        df = df.set_index("datetime").sort_index()
+        metadata["total_rows"] = len(df)
+        metadata["frequency"] = _infer_frequency(df.index)
+        return df[["value"]], metadata
+
+    # 4. Extraction et conversion (autres formats)
     df = df[[dt_col, val_col]].copy()
     df.columns = ["datetime", "value"]
 
@@ -104,51 +132,108 @@ def _is_data_row(row: pd.Series) -> bool:
         return False
 
 def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]:
-        
-    cols = df.columns.tolist()
-    cols_lower = [str(c).lower() for c in cols]
+    if df is None or df.empty or df.shape[1] == 0:
+        return None, None, "Unknown"
 
-    # SGE
-    if "horodate" in cols_lower and "valeur" in cols_lower:
-        return cols[cols_lower.index("horodate")], cols[cols_lower.index("valeur")], "SGE"
-    
-    # EMS
-    if "date" in cols_lower and "valeur" in cols_lower:
-        return cols[cols_lower.index("date")], cols[cols_lower.index("valeur")], "EMS"
+    # On travaille sur une copie str pour l'analyse de motifs
+    sample_df = df.head(20).copy().astype(str)
+    num_cols = df.shape[1]
+    cols = list(df.columns)
 
-    # ALEX / Standard
-    if "datetime" in cols_lower and any(x in cols_lower for x in ["w", "kw", "value"]):
-        val_idx = [i for i, c in enumerate(cols_lower) if c in ["w", "kw", "value"]][0]
-        return cols[cols_lower.index("datetime")], cols[val_idx], "ALEX"
-    
-    # PVGIS
-    
-    if df.shape[1] == 2:
-        first_col = df.iloc[:, 0].astype(str)
+    def match_ratio(series, pattern):
+        vals = series.dropna().astype(str).str.strip()
+        if len(vals) == 0:
+            return 0.0
+        return vals.str.match(pattern).mean()
 
-        pattern = r"^\d{8}:\d{4}$"
+    def numeric_ratio(series):
+        vals = (
+            series.dropna()
+            .astype(str)
+            .str.strip()
+            .str.replace(",", ".", regex=False)
+        )
+        if len(vals) == 0:
+            return 0.0
+        parsed = pd.to_numeric(vals, errors="coerce")
+        return parsed.notna().mean()
 
-        # on regarde les premières lignes
-        sample = first_col.head(10)
+    def datetime_ratio(series):
+        vals = series.dropna().astype(str).str.strip()
+        if len(vals) == 0:
+            return 0.0
+        parsed = pd.to_datetime(vals, errors="coerce", dayfirst=True)
+        return parsed.notna().mean()
 
-        if sample.str.match(pattern).all():
+    # 1) PVGIS : Signature YYYYMMDD:HHMM + 2 colonnes
+    if num_cols == 2:
+        if (
+            match_ratio(sample_df.iloc[:, 0], r"^\d{8}:\d{4}$") >= 0.7
+            and numeric_ratio(sample_df.iloc[:, 1]) >= 0.7
+        ):
             return cols[0], cols[1], "PVGIS"
 
-    # Fallback / Archelios / Headerless
-    dt_col, val_col = None, None
-    for i, col in enumerate(cols):
-        cl = str(col).lower()
-        if any(x in cl for x in ["date", "time", "horodate", "heure"]) or _is_data_row(df[col]):
-            if dt_col is None: dt_col = col
-        elif any(x in cl for x in ["valeur", "value", "w", "kw"]):
-            if val_col is None: val_col = col
+    # 2) Archelios : Date avec "/" + 2 colonnes
+    arche_pattern = r"^\d{1,2}/\d{1,2}/\d{2,4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$"
+    if num_cols == 2:
+        if (
+            match_ratio(sample_df.iloc[:, 0], arche_pattern) >= 0.7
+            and numeric_ratio(sample_df.iloc[:, 1]) >= 0.7
+        ):
+            return cols[0], cols[1], "Archelios"
 
-    # Si on n'a rien trouvé, on prend col 0 et col 1 (cas typique Archelios sans header)
-    if dt_col is None: dt_col = cols[0]
-    if val_col is None: val_col = cols[1] if len(cols) > 1 else None
-    
-    return dt_col, val_col, "Archelios" if "Archelios" not in cols else "Unknown"
+    # 3) EMS : ISO avec T et Z  (format: nom;date;ID_variable;valeur)
+    # On prend la DERNIÈRE colonne numérique après la date (pas l'ID de variable
+    # qui est lui aussi numérique mais grand entier situé avant la vraie valeur).
+    iso_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+    for i in range(num_cols):
+        if match_ratio(sample_df.iloc[:, i], iso_pattern) >= 0.7:
+            # Chercher toutes les colonnes numériques après la colonne date
+            numeric_candidates = [
+                j for j in range(num_cols)
+                if j != i and numeric_ratio(sample_df.iloc[:, j]) >= 0.7
+            ]
+            if numeric_candidates:
+                # Prendre la dernière colonne numérique (la valeur, pas l'ID)
+                return cols[i], cols[numeric_candidates[-1]], "EMS"
 
+    # 4) SGE : priorité aux noms de colonnes
+    cols_lower = [str(c).lower().strip() for c in cols]
+    if "horodate" in cols_lower and "valeur" in cols_lower:
+        return cols[cols_lower.index("horodate")], cols[cols_lower.index("valeur")], "SGE"
+
+    # 5) SGE : heuristique si headers absents/renommés
+    if num_cols >= 8:
+        has_sge_units = sample_df.apply(
+            lambda s: s.str.upper().isin(["W", "VAR", "VA"]).any()
+        ).any()
+
+        sge_date_pattern = r"^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$"
+        dt_idx = None
+        for i in range(num_cols):
+            if match_ratio(sample_df.iloc[:, i], sge_date_pattern) >= 0.7:
+                dt_idx = i
+                break
+
+        if dt_idx is not None and has_sge_units:
+            candidate_order = []
+            if dt_idx + 1 < num_cols:
+                candidate_order.append(dt_idx + 1)
+            candidate_order += [j for j in range(num_cols) if j != dt_idx and j not in candidate_order]
+
+            for j in candidate_order:
+                if numeric_ratio(sample_df.iloc[:, j]) >= 0.7:
+                    return cols[dt_idx], cols[j], "SGE"
+
+    # 6) Fallback final
+    if num_cols >= 2:
+        if (
+            datetime_ratio(sample_df.iloc[:, 0]) >= 0.7
+            and numeric_ratio(sample_df.iloc[:, 1]) >= 0.7
+        ):
+            return cols[0], cols[1], "Generic"
+
+    return None, None, "Unknown"
 def _infer_unit(fmt: str, val_col: str, df: pd.DataFrame) -> str:
     col_lower = str(val_col).lower()
     if fmt in ["SGE", "ALEX"] or " w" in col_lower or col_lower == "w":
