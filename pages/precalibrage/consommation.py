@@ -916,8 +916,12 @@ def render():
                     st.dataframe(df_conso, use_container_width=True)
                     st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
                 else:
+                    df_conso = None
+                    st.session_state["df_conso"] = df_conso
                     st.warning("⚠️ Aucun point de soutirage actif avec des données valides.")
             except Exception as e:
+                df_conso = None
+                st.session_state["df_conso"] = df_conso
                 st.error(f"Erreur création DataFrame croisé consommateurs : {e}")
 
         # Nettoyage : suppression des st.write() de debug

@@ -1052,8 +1052,14 @@ def render():
                     st.dataframe(df_prod, use_container_width=True)
                     st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
                 else:
+                    # Reset du DataFrame dans le state
+                    df_prod = None  # vide
+                    st.session_state["df_prod"] = df_prod
                     st.warning("⚠️ Aucun point d'injection actif avec des données valides.")
             except Exception as e:
+                # Reset du DataFrame dans le state
+                df_prod = None  # vide
+                st.session_state["df_prod"] = df_prod
                 st.error(f"Erreur création DataFrame croisé producteurs : {e}")
 
         # Nettoyage : suppression des st.write() de debug
