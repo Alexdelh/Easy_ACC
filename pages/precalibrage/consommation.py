@@ -378,10 +378,34 @@ def render():
                     edit_state["point_livraison"] = st.text_input("Point de livraison", value=edit_state.get("point_livraison", ""), key="edit_sout_pdl")
                     edit_state["aci"] = st.checkbox("Contrat ACI", value=edit_state["aci"], key="edit_sout_aci")
                     injection_points = st.session_state.get("points_injection", [])
-                    injection_names = [p["nom"] for p in injection_points]
-                    edit_state["aci_partenaire"] = st.selectbox("Partenaire ACI", ["Aucun"] + injection_names, 
-                        index=( ["Aucun"] + injection_names ).index(edit_state["aci_partenaire"] ) if edit_state["aci_partenaire"] in (["Aucun"] + injection_names) else 0,
+                    # Créer un mapping PDL/nom -> nom et une liste d'affichage avec PDL (ou nom si PDL vide)
+                    pdl_to_name = {}
+                    injection_display = []
+                    for p in injection_points:
+                        pdl = p.get("point_de_livraison", "")
+                        name = p["nom"]
+                        # Afficher le PDL s'il existe, sinon le nom
+                        display_value = pdl if pdl else name
+                        pdl_to_name[display_value] = name
+                        injection_display.append(display_value)
+                    
+                    # Trouver le PDL/nom correspondant au nom actuel
+                    current_display = None
+                    if edit_state["aci_partenaire"] and edit_state["aci_partenaire"] != "Aucun":
+                        for display_val, name in pdl_to_name.items():
+                            if name == edit_state["aci_partenaire"]:
+                                current_display = display_val
+                                break
+                    
+                    selected_display = st.selectbox("Partenaire ACI", ["Aucun"] + injection_display, 
+                        index=(["Aucun"] + injection_display).index(current_display) if current_display in (["Aucun"] + injection_display) else 0,
                         disabled=not edit_state["aci"], key="edit_sout_aci_partenaire")
+                    
+                    # Convertir le PDL/nom sélectionné en nom pour le stockage
+                    if selected_display != "Aucun":
+                        edit_state["aci_partenaire"] = pdl_to_name.get(selected_display, selected_display)
+                    else:
+                        edit_state["aci_partenaire"] = "Aucun"
 
                 # --- Gestion de la courbe de consommation dans l'édition ---
                 st.markdown("---")
@@ -566,25 +590,34 @@ def render():
             
             # Get list of injection points for ACI partner dropdown
             injection_points = st.session_state.get("points_injection", [])
-            injection_names = [p["nom"] for p in injection_points]
+            # Créer un mapping PDL -> nom et une liste d'affichage avec PDL (ou nom si PDL vide)
+            pdl_to_name = {}
+            injection_display = []
+            for p in injection_points:
+                pdl = p.get("point_de_livraison", "")
+                name = p["nom"]
+                # Afficher le PDL s'il existe, sinon le nom
+                display_value = pdl if pdl else name
+                pdl_to_name[display_value] = name
+                injection_display.append(display_value)
             
-            # Get already used ACI partners from existing soutirage points
+            # Get already used ACI partners from existing soutirage points (stockés avec les noms)
             used_aci_partners = {
                 p["aci_partenaire"] 
                 for p in st.session_state.get("points_soutirage", []) 
                 if p.get("aci") and p.get("aci_partenaire")
             }
             
-            # Filter out already used injection points
-            available_injection_names = [name for name in injection_names if name not in used_aci_partners]
+            # Filter out already used injection points based on names
+            available_injection_display = [pdl for pdl, name in pdl_to_name.items() if name not in used_aci_partners]
             
             # Disable ACI checkbox if no injection points available
-            has_available_injection_points = len(available_injection_names) > 0
+            has_available_injection_points = len(available_injection_display) > 0
             if not has_available_injection_points:
                 state["aci"] = False  # Force ACI to False if no injection points available
             
             # Determine help message
-            if len(injection_names) == 0:
+            if len(injection_display) == 0:
                 aci_help = "Nécessite au moins un point d'injection"
             elif not has_available_injection_points:
                 aci_help = "Tous les points d'injection sont déjà en ACI"
@@ -599,17 +632,28 @@ def render():
             )
             
             if has_available_injection_points:
+                # Trouver le PDL/nom correspondant au nom actuel
+                current_display = None
+                if state.get("aci_partenaire"):
+                    for display_val, name in pdl_to_name.items():
+                        if name == state.get("aci_partenaire") and display_val in available_injection_display:
+                            current_display = display_val
+                            break
+                
                 current_index = 0
-                if state.get("aci_partenaire") in available_injection_names:
-                    current_index = available_injection_names.index(state.get("aci_partenaire"))
-                state["aci_partenaire"] = st.selectbox(
+                if current_display and current_display in available_injection_display:
+                    current_index = available_injection_display.index(current_display)
+                
+                selected_display = st.selectbox(
                     "Partenaire ACI", 
-                    available_injection_names, 
+                    available_injection_display, 
                     index=current_index,
                     disabled=not state["aci"]
                 )
+                # Convertir le PDL/nom sélectionné en nom pour le stockage
+                state["aci_partenaire"] = pdl_to_name.get(selected_display, selected_display)
             else:
-                placeholder = "Aucun point d'injection" if len(injection_names) == 0 else "Tous les points d'injection sont déjà en ACI"
+                placeholder = "Aucun point d'injection" if len(injection_display) == 0 else "Tous les points d'injection sont déjà en ACI"
                 st.selectbox("Partenaire ACI", [placeholder], disabled=True)
                 state["aci_partenaire"] = None
         

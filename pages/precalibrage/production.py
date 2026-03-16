@@ -302,12 +302,13 @@ def render():
             <table class="injection-table">
                 <thead>
                     <tr>
-                        <th style="width: 8%;">Actif</th>
+                        <th style="width: 6%;">Actif</th>
                         <th style="width: 15%;">Nom</th>
                         <th style="width: 10%;">Type</th>
-                        <th style="width: 20%;">Segment</th>
-                        <th style="width: 20%;">Puissance (kW)</th>
-                        <th style="width: 20%;">Actions</th>
+                        <th style="width: 12%;">Segment</th>
+                        <th style="width: 15%;">Point de livraison</th>
+                        <th style="width: 12%;">Puissance (kW)</th>
+                        <th style="width: 18%;">Actions</th>
                     </tr>
                 </thead>
             </table>
@@ -326,7 +327,8 @@ def render():
                 else:
                     row_style = ""
                     
-                cols = st.columns([0.08, 0.15, 0.10, 0.10, 0.12, 0.10, 0.15, 0.20])
+                # Align columns with header: Actif(6%), Nom(15%), Type(10%), Segment(12%), PDL(15%), Puissance(12%), Actions(18%)
+                cols = st.columns([0.06, 0.15, 0.10, 0.12, 0.15, 0.12, 0.18])
                 with cols[0]:
                     if f"active_inj_{idx}" not in st.session_state:
                         st.session_state[f"active_inj_{idx}"] = is_active
@@ -345,8 +347,11 @@ def render():
                 with cols[3]:
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[4]:
+                    pdl = point.get('point_de_livraison', '')
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{pdl}</div>", unsafe_allow_html=True)
+                with cols[5]:
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{int(point['puissance'])}</div>", unsafe_allow_html=True)
-                with cols[7]:
+                with cols[6]:
                     action_cols = st.columns([1, 1, 1], gap="small")
                     with action_cols[0]:
                         if st.button("✏️", key=f"edit_{idx}", help="Modifier", use_container_width=True):
@@ -400,6 +405,7 @@ def render():
                     # edit_state["tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("tva", False), key="edit_tva")
                     # edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
                 with col3:
+                    edit_state["point_de_livraison"] = st.text_input("Point de livraison", value=edit_state.get("point_de_livraison", ""), key="edit_pdl")
                     edit_state["adresse"] = st.text_input("Adresse", value=edit_state["adresse"], key="edit_adresse")
                     
                     # Auto-géolocalisation si adresse remplie et changée
@@ -609,6 +615,7 @@ def render():
                     "nom": "",
                     "type": "Solaire",
                     "segment": "C4",
+                    "point_de_livraison": "",
                     "puissance": 0,
                     "apply_tva": False,
                     "valorisation": 0.0,
@@ -651,6 +658,7 @@ def render():
                 # )
 
             with col3:
+                state["point_de_livraison"] = st.text_input("Point de livraison", value=state.get("point_de_livraison", ""), placeholder="PDL123456789")
                 state["adresse"] = st.text_input(
                     "Adresse", value=state["adresse"], placeholder="123 Rue de la Production, 75001 Paris"
                 )
@@ -911,6 +919,7 @@ def render():
                             "nom": state["nom"],
                             "type": state["type"],
                             "segment": state["segment"],
+                            "point_de_livraison": state.get("point_de_livraison", ""),
                             "puissance": state["puissance"],
                             "tva": state["apply_tva"],
                             "valorisation": state["valorisation"],
@@ -951,6 +960,7 @@ def render():
                         # Reset form state
                         st.session_state["inj_form_state"] = {
                             "nom": "", "type": "Solaire", "segment": "C4",
+                            "point_de_livraison": "",
                             "puissance": 0, "apply_tva": False, "valorisation": 0.0,
                             "adresse": "", "source": "Aucune",
                             "curve_data": None, "coords": None
@@ -961,6 +971,7 @@ def render():
             if st.button("🔄 Réinitialiser", use_container_width=True):
                 st.session_state["inj_form_state"] = {
                     "nom": "", "type": "Solaire", "segment": "C4",
+                    "point_de_livraison": "",
                     "puissance": 0, "apply_tva": False, "valorisation": 0.0,
                     "adresse": "", "source": "Aucune",
                     "curve_data": None, "coords": None
