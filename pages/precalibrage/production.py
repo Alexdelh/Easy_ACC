@@ -366,21 +366,28 @@ def render():
                             st.rerun()
                     with action_cols[2]:
                         if st.session_state["confirm_delete_injection"] == idx:
-                            if st.button("✓", key=f"confirm_{idx}", help="Confirmer la suppression", use_container_width=True):
-                                st.session_state["points_injection"].pop(idx)
-                                st.session_state["confirm_delete_injection"] = None
-                                if st.session_state.get("project_id"):
-                                    from services.database import save_project
-                                    from services.state_serializer import serialize_state
-                                    save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
-                                st.success("Point supprimé")
-                                st.rerun()
+                            # Show both confirm and cancel buttons
+                            col_confirm, col_cancel = st.columns([1, 1])
+                            with col_confirm:
+                                if st.button("✓", key=f"confirm_{idx}", help="Confirmer la suppression", use_container_width=True):
+                                    st.session_state["points_injection"].pop(idx)
+                                    st.session_state["confirm_delete_injection"] = None
+                                    if st.session_state.get("project_id"):
+                                        from services.database import save_project
+                                        from services.state_serializer import serialize_state
+                                        save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
+                                    st.success("Point supprimé")
+                                    st.rerun()
+                            with col_cancel:
+                                if st.button("✗", key=f"cancel_{idx}", help="Annuler la suppression", use_container_width=True):
+                                    st.session_state["confirm_delete_injection"] = None
+                                    st.rerun()
                         else:
                             if st.button("🗑️", key=f"delete_{idx}", help="Supprimer", use_container_width=True):
                                 st.session_state["confirm_delete_injection"] = idx
                                 st.rerun()
                 if st.session_state["confirm_delete_injection"] == idx:
-                    st.warning(f"⚠️ Cliquez sur ✓ pour confirmer la suppression de '{point['nom']}'")
+                    st.warning(f"⚠️ Confirmer ou annuler la suppression de '{point['nom']}'")
                 if idx < len(points) - 1:
                     st.markdown("<hr style='margin: 8px 0; border: 0; border-top: 1px solid #e0e0e0;'>", unsafe_allow_html=True)
 
