@@ -9,6 +9,38 @@ PRECALIBRAGE_MENU = {
     4: "Paramètres",
 }
 
+def repartition_is_valid():
+    """Vérifie que les clés de répartition sont correctes."""
+
+    mode = st.session_state.get("repartition_mode", "Clé par défaut")
+
+    # Mode par défaut -> toujours valide
+    if mode == "Clé par défaut":
+        return True
+
+    # Mode statique
+    if mode == "Clé statique (pourcentages par consommateur)":
+        cp = st.session_state.get("consumer_percentages", {})
+        if not cp:
+            return False
+        total = sum(cp.values())
+        return abs(total - 100.0) < 0.001
+
+    # Mode dynamique
+    if mode == "Clé dynamique simple":
+        gstate = st.session_state.get("consumer_group_keys", {})
+
+        for pr, group in gstate.items():
+            if group.get("mode") == "static":
+                perc = group.get("percentages", {})
+                total = sum(perc.values())
+                if abs(total - 100.0) > 0.001:
+                    return False
+
+        return True
+
+    return True
+
 
 def render_sidebar_precalibrage():
     """Sidebar for precalibrage phase - navigation only."""
@@ -46,7 +78,10 @@ def render_sidebar_precalibrage():
         # Generate button only on last page
         if current_page == max(PRECALIBRAGE_MENU.keys()):
             st.divider()
-            if st.button("Générer le scénario", type="primary", width='stretch'):
+            valid_repartition = repartition_is_valid()
+            if not valid_repartition:
+                st.warning("⚠️ Les clés de répartition doivent totaliser 100 %.")
+            if st.button("Générer le scénario", type="primary", width='stretch', disabled=not valid_repartition):
                 # Call aggregation to build consolidated DataFrames
                 with st.spinner("Agrégation des courbes et sauvegarde du projet..."):
                     try:
