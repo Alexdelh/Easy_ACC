@@ -733,6 +733,7 @@ def render():
                                 curve_df = pd.read_excel(uploaded_file)
 
                             state["curve_data"] = curve_df
+                            print(curve_df.head())
                             st.success("✅ Fichier chargé")
                         except Exception as e:
                             st.error(f"⚠️ Erreur lecture fichier: {e}")
@@ -813,7 +814,7 @@ def render():
                                     curve.reset_index(inplace=True)
                                     curve.rename(columns={'index': 'datemine'}, inplace=True)
                                     curve.rename(columns={'P_ac_kW': 'value'}, inplace=True)
-                                    # curve = curve.iloc[1:]
+                                    print(curve.head())
                                     state["curve_data"] = curve
                                     state["last_pvgis_params"] = current_params
                                     duration_days = (end_date - start_date).days
@@ -1208,9 +1209,12 @@ def render():
                                 df_crop = df_full[mask].copy()
                                 missing_count = 8760 - len(df_crop)
                                 missing_datetimes = []
+                                
+                                # Définir target_index pour tous les cas (avec ou sans heures manquantes)
+                                ref_year = reference_year
+                                target_index = pd.date_range(start=f"{ref_year}-01-01 00:00:00", end=f"{ref_year}-12-31 23:00:00", freq="H")
+                                
                                 if missing_count > 0:
-                                    ref_year = reference_year
-                                    target_index = pd.date_range(start=f"{ref_year}-01-01 00:00:00", end=f"{ref_year}-12-31 23:00:00", freq="H")
                                     df_crop = df_crop.copy()
                                     missing_datetimes = [dt for dt in target_index if dt not in df_crop.index]
                                     st.warning(f"{nom} : {missing_count} heure(s) manquante(s) sur l'année civile. Heures manquantes : {[dt.strftime('%d/%m %Hh') for dt in missing_datetimes[:10]]}{' ...' if len(missing_datetimes)>10 else ''}")

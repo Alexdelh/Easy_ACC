@@ -34,9 +34,9 @@ def fetch_tmy(lat: float, lon: float, usehorizon: bool = True) -> Tuple[pd.DataF
     # Ensure column names consistent for pvlib ModelChain
     # get_pvgis_tmy returns columns like: ghi, dni, dhi, temp_air, wind_speed, etc.
     
-    # Debug: check start time of TMY data
-    if len(data) > 0:
-        logging.info(f"PVGIS TMY data start: {data.index[0]}, end: {data.index[-1]}, length: {len(data)}")
+    # # Debug: check start time of TMY data
+    # if len(data) > 0:
+    #     logging.info(f"PVGIS TMY data start: {data.index[0]}, end: {data.index[-1]}, length: {len(data)}")
     
     return data, metadata
 
@@ -128,13 +128,16 @@ def compute_pv_curve(
         
         # Set default dates if not provided
         if start_date is None:
-            start_date = pd.Timestamp('2024-01-01')
+            start_date = pd.Timestamp('2024-01-01 01:00:00')  # Start at 01:00 to align with XLS imports
         else:
-            # Convert datetime.date to Timestamp at 00:00
+            # Convert datetime.date to Timestamp at 01:00 (to match XLS format)
             if hasattr(start_date, 'year') and not isinstance(start_date, pd.Timestamp):
-                start_date = pd.Timestamp(year=start_date.year, month=start_date.month, day=start_date.day)
+                start_date = pd.Timestamp(year=start_date.year, month=start_date.month, day=start_date.day, hour=1)
             else:
                 start_date = pd.Timestamp(start_date)
+                # If start_date is at 00:00, adjust to 01:00 for alignment
+                if start_date.hour == 0 and start_date.minute == 0:
+                    start_date = start_date.replace(hour=1)
         
         # Debug: check start_date
         logging.info(f"start_date configured as: {start_date}")
