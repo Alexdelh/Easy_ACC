@@ -141,17 +141,17 @@ def render_banner_with_navigation(current_page: int, banner_content=None):
 
             with col_prev:
                 if current_page > 1:
-                    if st.button("← Précédent", use_container_width=True, key=f"prev_{current_page}"):
+                    if st.button("← Précédent", width='stretch', key=f"prev_{current_page}"):
                         st.switch_page(PAGES[current_page - 1])
                 else:
-                    st.button("← Précédent", disabled=True, use_container_width=True)
+                    st.button("← Précédent", disabled=True, width='stretch')
 
             with col_next:
                 if current_page < 6:
-                    if st.button("Suivant →", use_container_width=True, key=f"next_{current_page}"):
+                    if st.button("Suivant →", width='stretch', key=f"next_{current_page}"):
                         st.switch_page(PAGES[current_page + 1])
                 else:
-                    st.button("Suivant →", disabled=True, use_container_width=True)
+                    st.button("Suivant →", disabled=True, width='stretch')
 
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -203,17 +203,17 @@ def render_navigation_footer(current_page: int):
     
     with col1:
         if current_page > 1:
-            if st.button("← Précédent", use_container_width=True):
+            if st.button("← Précédent", width='stretch'):
                 st.switch_page(PAGES[current_page - 1])
         else:
-            st.button("← Précédent", disabled=True, use_container_width=True)
+            st.button("← Précédent", disabled=True, width='stretch')
     
     with col2:
         if current_page < 6:
-            if st.button("Suivant →", use_container_width=True):
+            if st.button("Suivant →", width='stretch'):
                 st.switch_page(PAGES[current_page + 1])
         else:
-            st.button("Suivant →", disabled=True, use_container_width=True)
+            st.button("Suivant →", disabled=True, width='stretch')
 
 
 def process_actors_file(uploaded_file, actor_type: str):

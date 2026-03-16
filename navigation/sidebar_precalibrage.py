@@ -30,23 +30,23 @@ def render_sidebar_precalibrage():
         col_prev, col_next = st.columns(2, gap="small")
         with col_prev:
             if current_page > 0: # Allow going back to Projets (0)
-                if st.button("← Précédent", use_container_width=True, key=f"prev_{current_page}"):
+                if st.button("← Précédent", width='stretch', key=f"prev_{current_page}"):
                     st.session_state["precalibrage_page"] = current_page - 1
                     st.rerun()
             else:
-                st.button("← Précédent", disabled=True, use_container_width=True)
+                st.button("← Précédent", disabled=True, width='stretch')
         with col_next:
             if current_page < max(PRECALIBRAGE_MENU.keys()):
-                if st.button("Suivant →", use_container_width=True, key=f"next_{current_page}"):
+                if st.button("Suivant →", width='stretch', key=f"next_{current_page}"):
                     st.session_state["precalibrage_page"] = current_page + 1
                     st.rerun()
             else:
-                st.button("Suivant →", disabled=True, use_container_width=True)
+                st.button("Suivant →", disabled=True, width='stretch')
 
         # Generate button only on last page
         if current_page == max(PRECALIBRAGE_MENU.keys()):
             st.divider()
-            if st.button("Générer le scénario", type="primary", use_container_width=True):
+            if st.button("Générer le scénario", type="primary", width='stretch'):
                 # Call aggregation to build consolidated DataFrames
                 with st.spinner("Agrégation des courbes et sauvegarde du projet..."):
                     try:

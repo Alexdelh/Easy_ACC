@@ -19,7 +19,7 @@ def render():
     with col_new:
         with st.expander("➕ Créer un nouveau projet", expanded=False):
             new_name = st.text_input("Nom du nouveau projet", placeholder="Mon Projet Solaire")
-            if st.button("Créer", type="primary", use_container_width=True):
+            if st.button("Créer", type="primary", width='stretch'):
                 if new_name.strip():
                      # 1. Reset Session State
                     st.session_state.clear()
@@ -80,7 +80,7 @@ def render():
                 col_act1, col_act2 = st.columns(2)
                 
                 # Load
-                if col_act1.button("📂 Charger", key=f"load_{p['id']}", use_container_width=True):
+                if col_act1.button("📂 Charger", key=f"load_{p['id']}", width='stretch'):
                     try:
                         project_data = load_project(p['id'])
                         if project_data:
@@ -112,16 +112,16 @@ def render():
                     st.session_state["confirm_delete_project"] = None
                     
                 if st.session_state["confirm_delete_project"] == p['id']:
-                    col_act2.button("Suppression...", disabled=True, key=f"del_dis_{p['id']}", use_container_width=True)
+                    col_act2.button("Suppression...", disabled=True, key=f"del_dis_{p['id']}", width='stretch')
                 else:
-                    if col_act2.button("🗑️ Supprimer", key=f"del_{p['id']}", help="Supprimer", use_container_width=True):
+                    if col_act2.button("🗑️ Supprimer", key=f"del_{p['id']}", help="Supprimer", width='stretch'):
                         st.session_state["confirm_delete_project"] = p['id']
                         st.rerun()
             
             if st.session_state.get("confirm_delete_project") == p['id']:
                 st.error("⚠️ Êtes-vous sûr de vouloir supprimer ce projet et toutes ses données (incluant les courbes) de façon permanente ?")
                 col_yes, col_no = st.columns([1, 1])
-                if col_yes.button("🚨 Oui, supprimer", key=f"confirm_yes_{p['id']}", use_container_width=True, type="primary"):
+                if col_yes.button("🚨 Oui, supprimer", key=f"confirm_yes_{p['id']}", width='stretch', type="primary"):
                     delete_project(p['id'])
                     # If the currently active project was deleted, reset the tracking keys
                     if st.session_state.get("project_id") == p['id']:
@@ -131,7 +131,7 @@ def render():
                     st.success("Projet supprimé avec succès.")
                     time.sleep(1)
                     st.rerun()
-                if col_no.button("❌ Annuler", key=f"confirm_no_{p['id']}", use_container_width=True):
+                if col_no.button("❌ Annuler", key=f"confirm_no_{p['id']}", width='stretch'):
                     st.session_state["confirm_delete_project"] = None
                     st.rerun()
             

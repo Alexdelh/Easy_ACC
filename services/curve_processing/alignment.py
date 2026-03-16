@@ -85,7 +85,7 @@ def align_curve_to_reference_year(df: pd.DataFrame, reference_year: int) -> pd.D
     # On cherche la plus longue séquence continue d'heures sans trou
     df_sorted = df.sort_index()
     # On crée une série d'heures attendues à partir de la première à la dernière date
-    full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='H')
+    full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='h')
     # On repère les plages continues
     mask = df_sorted.index.isin(full_range)
     # On réindexe pour avoir les NaN là où il manque des heures
@@ -127,7 +127,7 @@ def align_curve_to_reference_year(df: pd.DataFrame, reference_year: int) -> pd.D
     src_full_index = pd.date_range(
         start=f"{src_year}-01-01 00:00:00",
         end=f"{src_year}-12-31 23:00:00",
-        freq="H"
+        freq="h"
     )
     df = df_full.reindex(src_full_index)
     # Supprimer le 29 février pour normaliser à 8760h si l'année source est bissextile
@@ -166,7 +166,7 @@ def align_curve_to_reference_year(df: pd.DataFrame, reference_year: int) -> pd.D
     new_index = pd.date_range(
         start=ref_start,
         end=f"{reference_year}-12-31 23:00:00",
-        freq="H"
+        freq="h"
     )
     if ref_is_leap:
         new_index = new_index[~((new_index.month == 2) & (new_index.day == 29))]

@@ -354,12 +354,12 @@ def render():
                 with cols[6]:
                     action_cols = st.columns([1, 1, 1], gap="small")
                     with action_cols[0]:
-                        if st.button("✏️", key=f"edit_{idx}", help="Modifier", use_container_width=True):
+                        if st.button("✏️", key=f"edit_{idx}", help="Modifier", width='stretch'):
                             st.session_state["edit_injection_idx"] = idx
                             st.session_state["edit_injection_form"] = point.copy()
                             st.rerun()
                     with action_cols[1]:
-                        if st.button("📋", key=f"dup_{idx}", help="Dupliquer", use_container_width=True):
+                        if st.button("📋", key=f"dup_{idx}", help="Dupliquer", width='stretch'):
                             duplicated_point = point.copy()
                             duplicated_point["nom"] = f"{point['nom']} (copie)"
                             st.session_state["points_injection"].append(duplicated_point)
@@ -371,28 +371,21 @@ def render():
                             st.rerun()
                     with action_cols[2]:
                         if st.session_state["confirm_delete_injection"] == idx:
-                            # Show both confirm and cancel buttons
-                            col_confirm, col_cancel = st.columns([1, 1])
-                            with col_confirm:
-                                if st.button("✓", key=f"confirm_{idx}", help="Confirmer la suppression", use_container_width=True):
-                                    st.session_state["points_injection"].pop(idx)
-                                    st.session_state["confirm_delete_injection"] = None
-                                    if st.session_state.get("project_id"):
-                                        from services.database import save_project
-                                        from services.state_serializer import serialize_state
-                                        save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
-                                    st.success("Point supprimé")
-                                    st.rerun()
-                            with col_cancel:
-                                if st.button("✗", key=f"cancel_{idx}", help="Annuler la suppression", use_container_width=True):
-                                    st.session_state["confirm_delete_injection"] = None
-                                    st.rerun()
+                            if st.button("✓", key=f"confirm_{idx}", help="Confirmer la suppression", width='stretch'):
+                                st.session_state["points_injection"].pop(idx)
+                                st.session_state["confirm_delete_injection"] = None
+                                if st.session_state.get("project_id"):
+                                    from services.database import save_project
+                                    from services.state_serializer import serialize_state
+                                    save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), st.session_state["project_id"])
+                                st.success("Point supprimé")
+                                st.rerun()
                         else:
-                            if st.button("🗑️", key=f"delete_{idx}", help="Supprimer", use_container_width=True):
+                            if st.button("🗑️", key=f"delete_{idx}", help="Supprimer", width='stretch'):
                                 st.session_state["confirm_delete_injection"] = idx
                                 st.rerun()
                 if st.session_state["confirm_delete_injection"] == idx:
-                    st.warning(f"⚠️ Confirmer ou annuler la suppression de '{point['nom']}'")
+                    st.warning(f"⚠️ Cliquez sur ✓ pour confirmer la suppression de '{point['nom']}'")
                 if idx < len(points) - 1:
                     st.markdown("<hr style='margin: 8px 0; border: 0; border-top: 1px solid #e0e0e0;'>", unsafe_allow_html=True)
 
@@ -481,9 +474,9 @@ def render():
                     if df_to_show is not None and not df_to_show.empty:
                         # Display a small preview of the current curve
                         if "value" in df_to_show.columns:
-                            st.line_chart(df_to_show["value"], height=200, use_container_width=True)
+                            st.line_chart(df_to_show["value"], height=200, width='stretch')
                         else:
-                            st.line_chart(df_to_show, height=200, use_container_width=True)
+                            st.line_chart(df_to_show, height=200, width='stretch')
                     
                     if st.button("🗑️ Supprimer et remplacer cette courbe", key="delete_curve_injection"):
                         # Remove the curve to expose the uploader
@@ -528,7 +521,7 @@ def render():
                         start_date = st.session_state.get("start_date")
                         end_date = st.session_state.get("end_date")
                         
-                        if st.button("� Générer courbe PVGIS", key="edit_gen_pv", use_container_width=True):
+                        if st.button("🔄 Générer courbe PVGIS", key="edit_gen_pv", width='stretch'):
                             if not edit_state["nom"] or not edit_state["adresse"] or edit_state["puissance"] <= 0:
                                 st.error("⚠️ Remplissez Nom, Adresse et Puissance d'abord")
                             elif not start_date or not end_date:
@@ -799,7 +792,7 @@ def render():
                     if state["curve_data"] is not None and current_params != last_params:
                         st.warning("⚠️ Les paramètres ont changé. Cliquez sur 'Générer' pour recalculer la courbe.")
 
-                    if st.button("🔄 Générer courbe PVGIS", use_container_width=True):
+                    if st.button("🔄 Générer courbe PVGIS", width='stretch'):
                         if not state["nom"] or state["puissance"] <= 0:
                             st.error("⚠️ Remplissez Nom et Puissance d'abord")
                         elif not state.get("coords") or not state["coords"].get("lat") or not state["coords"].get("lng"):
@@ -856,9 +849,9 @@ def render():
                             norm_df = result["df"]
 
                             if "value" in norm_df.columns:
-                                st.line_chart(norm_df["value"], use_container_width=True, height=300)
+                                st.line_chart(norm_df["value"], width='stretch', height=300)
                             else:
-                                st.line_chart(norm_df, use_container_width=True, height=300)
+                                st.line_chart(norm_df, width='stretch', height=300)
 
                             st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
 
@@ -886,7 +879,7 @@ def render():
         col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
         
         with col_btn1:
-            if st.button("✅ Valider et ajouter le point", use_container_width=True, type="primary"):
+            if st.button("✅ Valider et ajouter le point", width='stretch', type="primary"):
                 # Validate all required fields
                 if not state["nom"]:
                     st.error("⚠️ Le champ Nom est obligatoire")
@@ -975,7 +968,7 @@ def render():
                         st.rerun()
         
         with col_btn2:
-            if st.button("🔄 Réinitialiser", use_container_width=True):
+            if st.button("🔄 Réinitialiser", width='stretch'):
                 st.session_state["inj_form_state"] = {
                     "nom": "", "type": "Solaire", "segment": "C4",
                     "point_de_livraison": "",
@@ -1005,7 +998,7 @@ def render():
             if not isinstance(df.index, pd.DatetimeIndex) or "value" not in df.columns:
                 return False
             df_sorted = df.sort_index()
-            full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='H')
+            full_range = pd.date_range(start=df_sorted.index.min(), end=df_sorted.index.max(), freq='h')
             df_full = df_sorted.reindex(full_range)
             max_len = 0
             current_len = 0
@@ -1114,7 +1107,7 @@ def render():
                         full_range = pd.date_range(
                             start=f"{src_year}-01-01 00:00:00",
                             end=f"{src_year}-12-31 23:00:00",
-                            freq='H'
+                            freq='h'
                         )
                         df_full = df_sorted.reindex(full_range)
                         max_len = 0
@@ -1161,7 +1154,7 @@ def render():
 
                         # Générer l'index cible pour l'année de référence, sans 29 février si bissextile
                         is_leap_ref = (reference_year % 4 == 0 and (reference_year % 100 != 0 or reference_year % 400 == 0))
-                        target_index = pd.date_range(start=f"{reference_year}-01-01 00:00:00", end=f"{reference_year}-12-31 23:00:00", freq="H")
+                        target_index = pd.date_range(start=f"{reference_year}-01-01 00:00:00", end=f"{reference_year}-12-31 23:00:00", freq="h")
                         if is_leap_ref:
                             target_index = target_index[~((target_index.month == 2) & (target_index.day == 29))]
 
@@ -1185,31 +1178,18 @@ def render():
                         missing_count = len(missing_datetimes)
                         df_crop = df_aligned.copy()
                         if missing_count > 0:
-                            st.warning(f"{nom} : {missing_count} heure(s) manquante(s) sur l'année civile {reference_year}. Heures manquantes : {[dt.strftime('%d/%m %Hh') for dt in missing_datetimes[:10]]}{' ...' if len(missing_datetimes)>10 else ''}")
-                            option = st.selectbox(
-                                f"Comment remplir les {missing_count} valeurs manquantes pour {nom} ?",
-                                ["Laisser manquant (NaN)", "Remplir par zéro", "Saisir manuellement"],
-                                key=f"missing_option_{nom}"
-                            )
-                            if option == "Remplir par zéro":
-                                for dt in missing_datetimes:
-                                    df_crop.loc[dt, "value"] = 0.0
-                                df_crop = df_crop.sort_index()
-                            elif option == "Saisir manuellement":
-                                manual_vals = {}
-                                for dt in missing_datetimes:
-                                    val = st.number_input(f"{nom} - {dt.strftime('%d/%m %Hh')}", min_value=0.0, step=0.1, key=f"manual_{nom}_{dt}")
-                                    manual_vals[dt] = val
-                                for dt, val in manual_vals.items():
-                                    df_crop.loc[dt, "value"] = val
-                                df_crop = df_crop.sort_index()
-                            # Si "Laisser manquant (NaN)", ne rien faire, les NaN restent affichés
+                            # Remplissage automatique à 0 pour les valeurs manquantes
+                            for dt in missing_datetimes:
+                                df_crop.loc[dt, "value"] = 0.0
+                            df_crop = df_crop.sort_index()
+                        # Remplir tous les NaN/None restants à 0.0
+                        df_crop['value'] = df_crop['value'].fillna(0.0).astype(float)
                         df_named = df_crop[["value"]].rename(columns={"value": nom})
                         if not isinstance(df_named.index, pd.DatetimeIndex):
                             df_named.index = pd.to_datetime(df_named.index)
                         st.session_state["df_prod"] = df_named
                         if df_named is not None and not df_named.empty:
-                            st.dataframe(df_named, use_container_width=True)
+                            st.dataframe(df_named, width='stretch')
                             st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
                         else:
                             st.warning("⚠️ DataFrame vide après traitement.")
@@ -1230,30 +1210,15 @@ def render():
                                 
                                 # Définir target_index pour tous les cas (avec ou sans heures manquantes)
                                 ref_year = reference_year
-                                target_index = pd.date_range(start=f"{ref_year}-01-01 00:00:00", end=f"{ref_year}-12-31 23:00:00", freq="H")
+                                target_index = pd.date_range(start=f"{ref_year}-01-01 00:00:00", end=f"{ref_year}-12-31 23:00:00", freq="h")
                                 
                                 if missing_count > 0:
                                     df_crop = df_crop.copy()
                                     missing_datetimes = [dt for dt in target_index if dt not in df_crop.index]
-                                    st.warning(f"{nom} : {missing_count} heure(s) manquante(s) sur l'année civile. Heures manquantes : {[dt.strftime('%d/%m %Hh') for dt in missing_datetimes[:10]]}{' ...' if len(missing_datetimes)>10 else ''}")
-                                    option = st.selectbox(
-                                        f"Comment remplir les {missing_count} valeurs manquantes pour {nom} ?",
-                                        ["Laisser manquant (NaN)", "Remplir par zéro", "Saisir manuellement"],
-                                        key=f"missing_option_{nom}"
-                                    )
-                                    if option == "Remplir par zéro":
-                                        for dt in missing_datetimes:
-                                            df_crop.loc[dt, "value"] = 0.0
-                                        df_crop = df_crop.sort_index()
-                                    elif option == "Saisir manuellement":
-                                        manual_vals = {}
-                                        for dt in missing_datetimes:
-                                            val = st.number_input(f"{nom} - {dt.strftime('%d/%m %Hh')}", min_value=0.0, step=0.1, key=f"manual_{nom}_{dt}")
-                                            manual_vals[dt] = val
-                                        for dt, val in manual_vals.items():
-                                            df_crop.loc[dt, "value"] = val
-                                        df_crop = df_crop.sort_index()
-                                    # Si "Laisser manquant (NaN)", ne rien faire
+                                    # Remplissage automatique à 0 pour les valeurs manquantes
+                                    for dt in missing_datetimes:
+                                        df_crop.loc[dt, "value"] = 0.0
+                                    df_crop = df_crop.sort_index()
                                 # Reindex direct si même année, sinon alignement calendaire
                                 src_year_crop = df_crop.index[0].year if len(df_crop) > 0 else None
                                 if src_year_crop == reference_year:
@@ -1265,6 +1230,8 @@ def render():
                                     except CalendarAlignmentError as err:
                                         st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
                                         continue
+                                # Remplir les NaN restants à 0
+                                df_aligned['value'] = df_aligned['value'].fillna(0.0).astype(float)
                                 df_named = df_aligned[["value"]].rename(columns={"value": nom})
                                 if not isinstance(df_named.index, pd.DatetimeIndex):
                                     df_named.index = pd.to_datetime(df_named.index)
@@ -1278,7 +1245,7 @@ def render():
                                     df_prod = pd.concat(dfs, axis=1)
                                 st.session_state["df_prod"] = df_prod
                                 if df_prod is not None and not df_prod.empty:
-                                    st.dataframe(df_prod, use_container_width=True)
+                                    st.dataframe(df_prod, width='stretch')
                                     st.info(f"Année de référence pour l'alignement calendaire : {reference_year}")
                                 else:
                                     st.warning("⚠️ DataFrame vide après traitement.")

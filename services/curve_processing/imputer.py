@@ -84,7 +84,7 @@ def impute_by_week_shift(df: pd.DataFrame, value_col: str = "value", max_weeks: 
             break
         # create shifted series
         shift_hours = off * 24 * 7
-        shifted = s.shift(shift_hours, freq="H") if isinstance(shift_hours, int) else s.shift(pd.DateOffset(weeks=off))
+        shifted = s.shift(shift_hours, freq="h") if isinstance(shift_hours, int) else s.shift(pd.DateOffset(weeks=off))
 
         # For positions still missing, try to fill from shifted
         for ts in list(missing_idx):
