@@ -28,7 +28,7 @@ GEO_DATABASE = {
     "Nice": {"lat": 43.7102, "lng": 7.2620, "epci": "Métropole Nice Côte d'Azur"},
 }
 
-DISTANCE_OPTIONS = ["2 km", "10 km", "20 km", "EPCI"]
+DISTANCE_OPTIONS = ["2 km", "10 km", "20 km"]
 
 def get_coordinates_from_address(commune: str) -> dict:
     """Retrieve coordinates from mock geographic database."""

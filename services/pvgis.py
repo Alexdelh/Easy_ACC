@@ -33,6 +33,11 @@ def fetch_tmy(lat: float, lon: float, usehorizon: bool = True) -> Tuple[pd.DataF
     )
     # Ensure column names consistent for pvlib ModelChain
     # get_pvgis_tmy returns columns like: ghi, dni, dhi, temp_air, wind_speed, etc.
+    
+    # Debug: check start time of TMY data
+    if len(data) > 0:
+        logging.info(f"PVGIS TMY data start: {data.index[0]}, end: {data.index[-1]}, length: {len(data)}")
+    
     return data, metadata
 
 
@@ -125,12 +130,26 @@ def compute_pv_curve(
         if start_date is None:
             start_date = pd.Timestamp('2024-01-01')
         else:
-            start_date = pd.Timestamp(start_date)
+            # Convert datetime.date to Timestamp at 00:00
+            if hasattr(start_date, 'year') and not isinstance(start_date, pd.Timestamp):
+                start_date = pd.Timestamp(year=start_date.year, month=start_date.month, day=start_date.day)
+            else:
+                start_date = pd.Timestamp(start_date)
+        
+        # Debug: check start_date
+        logging.info(f"start_date configured as: {start_date}")
         
         if end_date is None:
-            end_date = pd.Timestamp('2024-12-31')
+            end_date = pd.Timestamp('2024-12-31 23:00:00')
         else:
-            end_date = pd.Timestamp(end_date)
+            # Convert datetime.date to Timestamp at 23:00 (end of day)
+            if hasattr(end_date, 'year') and not isinstance(end_date, pd.Timestamp):
+                end_date = pd.Timestamp(year=end_date.year, month=end_date.month, day=end_date.day, hour=23)
+            else:
+                end_date = pd.Timestamp(end_date)
+                # If end_date was given as midnight (00:00), adjust to 23:00 of that day
+                if end_date.hour == 0 and end_date.minute == 0:
+                    end_date = end_date.replace(hour=23)
         
         # Calculate required number of hours based on date range
         hours_needed = int((end_date - start_date).total_seconds() / 3600) + 1
@@ -151,6 +170,10 @@ def compute_pv_curve(
         
         # Ensure we don't go past end_date
         df = df[df.index <= end_date]
+        
+        # Debug: check final dataframe
+        if len(df) > 0:
+            logging.info(f"Final curve start: {df.index[0]}, end: {df.index[-1]}, length: {len(df)}")
         
         return df
     except Exception as e:

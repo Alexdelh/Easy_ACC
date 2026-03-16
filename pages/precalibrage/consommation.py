@@ -232,13 +232,10 @@ def render():
                 <thead>
                     <tr>
                         <th style="width: 8%;">Actif</th>
-                        <th style="width: 15%;">Nom</th>
-                        <th style="width: 10%;">Segment</th>
-                        <th style="width: 11%;">Tarif réf. (c€)</th>
-                        <th style="width: 10%;">ACI</th>
-                        <th style="width: 8%;">TVA</th>
-                        <th style="width: 11%;">Structure</th>
-                        <th style="width: 12%;">Tarif comp.</th>
+                        <th style="width: 18%;">Nom</th>
+                        <th style="width: 12%;">Segment</th>
+                        <th style="width: 22%;">Adresse</th>
+                        <th style="width: 12%;">ACI</th>
                         <th style="width: 15%;">Actions</th>
                     </tr>
                 </thead>
@@ -257,7 +254,7 @@ def render():
                 else:
                     row_style = ""
                     
-                cols = st.columns([0.08, 0.15, 0.10, 0.11, 0.10, 0.08, 0.11, 0.12, 0.15])
+                cols = st.columns([0.08, 0.18, 0.12, 0.22, 0.12, 0.15])
 
                 with cols[0]:
                     if f"active_sout_{idx}" not in st.session_state:
@@ -275,18 +272,12 @@ def render():
                 with cols[2]:
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[3]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_reference']}</div>", unsafe_allow_html=True)
+                    adresse_display = point.get('adresse', 'N/A')
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{adresse_display}</div>", unsafe_allow_html=True)
                 with cols[4]:
                     aci_text = f"✅ {point['aci_partenaire']}" if point['aci'] else "❌"
                     st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
                 with cols[5]:
-                    tva_status = "✅" if point.get('tva', False) else "❌"
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{tva_status}</div>", unsafe_allow_html=True)
-                with cols[6]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['structure_tarifaire']}</div>", unsafe_allow_html=True)
-                with cols[7]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['tarif_complement']}</div>", unsafe_allow_html=True)
-                with cols[8]:
                     action_cols = st.columns([1, 1, 1], gap="small")
                     with action_cols[0]:
                         if st.button("✏️", key=f"edit_s_{idx}", help="Modifier", use_container_width=True):
@@ -333,6 +324,8 @@ def render():
                 with col1:
                     edit_state["nom"] = st.text_input("Nom *", value=edit_state["nom"], key="edit_sout_nom")
                     edit_state["segment"] = st.text_input("Segment", value=edit_state["segment"], key="edit_sout_segment")
+                
+                with col2:
                     edit_state["adresse"] = st.text_input("Adresse", value=edit_state["adresse"], key="edit_sout_adresse")
                     
                     # Auto-géolocalisation si adresse remplie et changée
@@ -380,19 +373,15 @@ def render():
                     # Mettre à jour coords avec les valeurs manuelles
                     if edit_state["manual_lat"] != 0.0 or edit_state["manual_lng"] != 0.0:
                         edit_state["coords"] = {"lat": edit_state["manual_lat"], "lng": edit_state["manual_lng"]}
-                with col2:
-                    edit_state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=edit_state["tarif_reference"], format="%.2f", key="edit_sout_tarif_reference")
-                    edit_state["apply_tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("apply_tva", False), key="edit_sout_apply_tva")
-                    edit_state["structure_tarifaire"] = st.selectbox("Structure tarifaire", ["Base", "Heures pleines / Heures creuses", "4 quadrants"], 
-                        index=["Base", "Heures pleines / Heures creuses", "4 quadrants"].index(edit_state["structure_tarifaire"]), key="edit_sout_structure_tarifaire")
+                
                 with col3:
+                    edit_state["point_livraison"] = st.text_input("Point de livraison", value=edit_state.get("point_livraison", ""), key="edit_sout_pdl")
                     edit_state["aci"] = st.checkbox("Contrat ACI", value=edit_state["aci"], key="edit_sout_aci")
                     injection_points = st.session_state.get("points_injection", [])
                     injection_names = [p["nom"] for p in injection_points]
                     edit_state["aci_partenaire"] = st.selectbox("Partenaire ACI", ["Aucun"] + injection_names, 
                         index=( ["Aucun"] + injection_names ).index(edit_state["aci_partenaire"] ) if edit_state["aci_partenaire"] in (["Aucun"] + injection_names) else 0,
                         disabled=not edit_state["aci"], key="edit_sout_aci_partenaire")
-                    edit_state["tarif_complement"] = st.number_input("Tarif de complément (c€/kWh)", min_value=0.0, step=0.01, value=edit_state["tarif_complement"], format="%.2f", key="edit_sout_tarif_complement")
 
                 # --- Gestion de la courbe de consommation dans l'édition ---
                 st.markdown("---")
@@ -506,10 +495,9 @@ def render():
         # Initialize form state if needed
         if "sout_form_state" not in st.session_state:
             st.session_state["sout_form_state"] = {
-                "nom": "", "segment": "", "tarif_reference": 0.0,
-                "apply_tva": False, "structure_tarifaire": "Base",
+                "nom": "", "point_livraison": "", "segment": "",
                 "aci": False,
-                "tarif_complement": 0.0, "adresse": "A",
+                "adresse": "",
                 "curve_data": None, "coords": None
             }
         
@@ -521,6 +509,8 @@ def render():
         with col1:
             state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
             state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
+        
+        with col2:
             state["adresse"] = st.text_input("Adresse", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
             
             # Auto-géolocalisation si adresse remplie
@@ -571,13 +561,9 @@ def render():
             if state["manual_lat"] != 0.0 or state["manual_lng"] != 0.0:
                 state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
         
-        with col2:
-            state["tarif_reference"] = st.number_input("Tarif d'achat de référence (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_reference"], format="%.2f")
-            state["apply_tva"] = st.checkbox("Récupération de TVA", value=state["apply_tva"])
-            state["structure_tarifaire"] = st.selectbox("Structure tarifaire", ["Base", "Heures pleines / Heures creuses", "4 quadrants"], 
-                                                        index=["Base", "Heures pleines / Heures creuses", "4 quadrants"].index(state["structure_tarifaire"]))
-        
         with col3:
+            state["point_livraison"] = st.text_input("Point de livraison", value=state.get("point_livraison", ""), placeholder="12345678901234")
+            
             # Get list of injection points for ACI partner dropdown
             injection_points = st.session_state.get("points_injection", [])
             injection_names = [p["nom"] for p in injection_points]
@@ -626,8 +612,6 @@ def render():
                 placeholder = "Aucun point d'injection" if len(injection_names) == 0 else "Tous les points d'injection sont déjà en ACI"
                 st.selectbox("Partenaire ACI", [placeholder], disabled=True)
                 state["aci_partenaire"] = None
-            
-            state["tarif_complement"] = st.number_input("Tarif de complément (c€/kWh)", min_value=0.0, step=0.01, value=state["tarif_complement"], format="%.2f")
         
         # Curve upload
         st.markdown("**Courbe de consommation**")
@@ -731,13 +715,10 @@ def render():
                         # Create and add point (store processed result dict so aggregation can read it)
                         new_point = {
                             "nom": state["nom"],
+                            "point_livraison": state.get("point_livraison", ""),
                             "segment": state["segment"],
-                            "tarif_reference": state["tarif_reference"],
                             "aci": state["aci"],
                             "aci_partenaire": state["aci_partenaire"] if state["aci"] else "Aucun",
-                            "tva": state["apply_tva"],
-                            "structure_tarifaire": state["structure_tarifaire"],
-                            "tarif_complement": state["tarif_complement"],
                             "adresse": state["adresse"],
                             "active": True,
                             # Store either raw df or processed dict; processed preferred
@@ -775,10 +756,9 @@ def render():
                         
                         # Reset form state
                         st.session_state["sout_form_state"] = {
-                            "nom": "", "segment": "", "tarif_reference": 0.0,
-                            "apply_tva": False, "structure_tarifaire": "Base",
+                            "nom": "", "point_livraison": "", "segment": "",
                             "aci": False, "aci_partenaire": "Aucun",
-                            "tarif_complement": 0.0, "adresse": "",
+                            "adresse": "",
                             "curve_data": None, "coords": None
                         }
                         st.rerun()
@@ -786,10 +766,9 @@ def render():
         with col_btn2:
             if st.button("🔄 Réinitialiser", use_container_width=True):
                 st.session_state["sout_form_state"] = {
-                    "nom": "", "segment": "", "tarif_reference": 0.0,
-                    "apply_tva": False, "structure_tarifaire": "Base",
+                    "nom": "", "point_livraison": "", "segment": "",
                     "aci": False, "aci_partenaire": "Aucun",
-                    "tarif_complement": 0.0, "adresse": "",
+                    "adresse": "",
                     "curve_data": None, "coords": None
                 }
                 st.rerun()

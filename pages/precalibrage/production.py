@@ -305,10 +305,8 @@ def render():
                         <th style="width: 8%;">Actif</th>
                         <th style="width: 15%;">Nom</th>
                         <th style="width: 10%;">Type</th>
-                        <th style="width: 10%;">Segment</th>
-                        <th style="width: 12%;">Puissance (kW)</th>
-                        <th style="width: 10%;">TVA</th>
-                        <th style="width: 15%;">Valorisation (cEUR/kWh)</th>
+                        <th style="width: 20%;">Segment</th>
+                        <th style="width: 20%;">Puissance (kW)</th>
                         <th style="width: 20%;">Actions</th>
                     </tr>
                 </thead>
@@ -348,11 +346,6 @@ def render():
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[4]:
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{int(point['puissance'])}</div>", unsafe_allow_html=True)
-                with cols[5]:
-                    tva_status = "✅" if point.get('tva', False) else "❌"
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{tva_status}</div>", unsafe_allow_html=True)
-                with cols[6]:
-                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['valorisation']}</div>", unsafe_allow_html=True)
                 with cols[7]:
                     action_cols = st.columns([1, 1, 1], gap="small")
                     with action_cols[0]:
@@ -401,11 +394,11 @@ def render():
                     edit_state["nom"] = st.text_input("Nom *", value=edit_state["nom"], key="edit_nom")
                     edit_state["type"] = st.selectbox("Type", ["Solaire", "Éolien"], index=["Solaire", "Éolien"].index(edit_state["type"]) if edit_state["type"] in ["Solaire", "Éolien"] else 0, key="edit_type")
                     segment_options = ["C2", "C3", "C4", "C5"]
-                    edit_state["segment"] = st.selectbox("Segment", segment_options, index=segment_options.index(edit_state["segment"]) if edit_state["segment"] in segment_options else 2, key="edit_segment")
                 with col2:
                     edit_state["puissance"] = st.number_input("Puissance (kW)", min_value=0, step=1, value=edit_state["puissance"], format="%d", key="edit_puissance")
-                    edit_state["tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("tva", False), key="edit_tva")
-                    edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
+                    edit_state["segment"] = st.selectbox("Segment", segment_options, index=segment_options.index(edit_state["segment"]) if edit_state["segment"] in segment_options else 2, key="edit_segment")
+                    # edit_state["tva"] = st.checkbox("Récupération de TVA", value=edit_state.get("tva", False), key="edit_tva")
+                    # edit_state["valorisation"] = st.number_input("Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=edit_state["valorisation"], format="%.2f", key="edit_valorisation")
                 with col3:
                     edit_state["adresse"] = st.text_input("Adresse", value=edit_state["adresse"], key="edit_adresse")
                     
@@ -502,6 +495,8 @@ def render():
                                 else:
                                     curve_df = pd.read_excel(uploaded_file)
                                 edit_state["curve_data"] = curve_df
+
+                                print(curve_df.head())
                                 st.success("✅ Fichier chargé, prêt à être enregistré.")
                             except Exception as e:
                                 st.error(f"⚠️ Erreur lecture fichier: {e}")
@@ -535,6 +530,11 @@ def render():
                                             start_date=start_date, end_date=end_date
                                         )
                                         if curve is not None:
+                                            # Multiplier par 1000 pour convertir kW en W
+                                            curve['P_ac_kW'] = curve['P_ac_kW'] * 1000
+                                            curve.reset_index(inplace=True)
+                                            curve.rename(columns={"index": "datetime"}, inplace=True)
+                                            curve.rename(columns={"P_ac_kW": "value"}, inplace=True)
                                             edit_state["curve_data"] = curve
                                             st.success("✅ Courbe PVGIS générée, prête à être enregistrée.")
                                         else:
@@ -550,7 +550,8 @@ def render():
                     if not has_curve and edit_state.get("curve_data") is not None:
                         processed = None
                         try:
-                            processed = process_curve(edit_state["curve_data"])
+                            curve_df = edit_state["curve_data"].copy()
+                            processed = process_curve(curve_df)
                         except Exception as e:
                             st.error(f"Erreur traitement: {e}")
                         
@@ -629,20 +630,25 @@ def render():
                     index=["Solaire", "Éolien"].index(state["type"]) if state["type"] in ["Solaire", "Éolien"] else 0,
                 )
                 segment_options = ["C2", "C3", "C4", "C5"]
-                state["segment"] = st.selectbox(
-                    "Segment",
-                    segment_options,
-                    index=segment_options.index(state["segment"]) if state["segment"] in segment_options else 2,
-                )
+                # state["segment"] = st.selectbox(
+                #     "Segment",
+                #     segment_options,
+                #     index=segment_options.index(state["segment"]) if state["segment"] in segment_options else 2,
+                # )
 
             with col2:
                 state["puissance"] = st.number_input(
                     "Puissance (kW)", min_value=0, step=1, value=int(state["puissance"]), format="%d"
                 )
-                state["apply_tva"] = st.checkbox("Récupération de TVA", value=bool(state["apply_tva"]))
-                state["valorisation"] = st.number_input(
-                    "Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=float(state["valorisation"]), format="%.2f"
+                state["segment"] = st.selectbox(
+                    "Segment",
+                    segment_options,
+                    index=segment_options.index(state["segment"]) if state["segment"] in segment_options else 2,
                 )
+                # state["apply_tva"] = st.checkbox("Récupération de TVA", value=bool(state["apply_tva"]))
+                # state["valorisation"] = st.number_input(
+                #     "Valorisation (cEUR/kWh)", min_value=0.0, step=0.01, value=float(state["valorisation"]), format="%.2f"
+                # )
 
             with col3:
                 state["adresse"] = st.text_input(
@@ -762,12 +768,14 @@ def render():
                         return val
 
                     if start_date and end_date:
-                        start_date_dt = to_date(start_date)
-                        end_date_dt = to_date(end_date)
-                        duration_days = (end_date_dt - start_date_dt).days
-                        st.info(f"📅 Période configurée : {start_date_dt.strftime('%d/%m/%Y')} → {end_date_dt.strftime('%d/%m/%Y')} ({duration_days} jours)")
+                        # Ensure dates are valid
+                        if hasattr(start_date, 'strftime'):
+                            duration_days = (end_date - start_date).days
+                            st.info(f"📅 Période configurée : {start_date.strftime('%d/%m/%Y')} → {end_date.strftime('%d/%m/%Y')} ({duration_days} jours)")
+                        else:
+                            st.warning(f"⚠️ Dates invalides : start={start_date}, end={end_date}")
                     else:
-                        st.warning("⚠️ Configurez les dates dans 'Infos générales' d'abord")
+                        st.warning("⚠️ Configurez les dates dans 'Infos générales' d'abord (start_date et end_date)")
 
                     current_params = f"{state['adresse']}_{state['puissance']}_{tilt}_{azimuth}_{losses}_{start_date}_{end_date}"
                     last_params = state.get("last_pvgis_params", "")
@@ -783,7 +791,9 @@ def render():
                         elif not start_date or not end_date:
                             st.error("⚠️ Configurez les dates dans 'Infos générales' d'abord")
                         elif start_date >= end_date:
-                            st.error("⚠️ La date de début doit être antérieure à la date de fin")
+                            st.error(f"⚠️ Date de début ({start_date}) doit être antérieure à date de fin ({end_date})")
+                        elif start_date >= end_date:
+                            st.error(f"⚠️ Date de début ({start_date}) doit être antérieure à date de fin ({end_date})")
                         else:
                             with st.spinner("Génération de la courbe PVGIS en cours..."):
                                 coords = state["coords"]
@@ -798,6 +808,12 @@ def render():
                                     end_date=end_date,
                                 )
                                 if curve is not None:
+                                    # Multiplier par 1000 pour convertir kW en W
+                                    curve['P_ac_kW'] = curve['P_ac_kW'] * 1000
+                                    curve.reset_index(inplace=True)
+                                    curve.rename(columns={'index': 'datemine'}, inplace=True)
+                                    curve.rename(columns={'P_ac_kW': 'value'}, inplace=True)
+                                    # curve = curve.iloc[1:]
                                     state["curve_data"] = curve
                                     state["last_pvgis_params"] = current_params
                                     duration_days = (end_date - start_date).days
@@ -816,7 +832,8 @@ def render():
                 if state.get("curve_data") is not None:
                     st.markdown("**📊 Aperçu**")
                     try:
-                        result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
+                        curve_df = state["curve_data"].copy()
+                        result = process_curve(curve_df) 
 
                         print("Result from process_curve:", result)  # Debug log
                         if result.get("success") and result.get("df") is not None and len(result["df"]) > 0:
@@ -880,7 +897,11 @@ def render():
                         # Process uploaded curve and store processing result
                         processed = None
                         try:
-                            processed = process_curve(state["curve_data"]) if state.get("curve_data") is not None else None
+                            if state.get("curve_data") is not None:
+                                curve_df = state["curve_data"].copy()
+                                processed = process_curve(curve_df)
+                            else:
+                                processed = None
                         except Exception as e:
                             st.error(f"Erreur traitement courbe: {e}")
 

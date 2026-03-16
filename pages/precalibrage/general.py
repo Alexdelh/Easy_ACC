@@ -78,7 +78,7 @@ def render():
         )
 
         # Dynamic index for Operation Type
-        OPERATION_TYPES = ["Ouverte", "Patrimoniale"]
+        OPERATION_TYPES = ["Ouverte"]
         if "_operation_type" not in st.session_state:
             val = st.session_state.get("operation_type", "Ouverte")
             if val not in OPERATION_TYPES:
@@ -118,7 +118,6 @@ def render():
                 st.markdown(f"""
                 **Détails géographiques:**
                 - **Code postal**: {st.session_state['postal_code']}
-                - **Ville**: {coords['city']}
                 - **Coordonnées**: {coords['lat']:.4f}°, {coords['lng']:.4f}°
                 - **Périmètre d'opération**: {st.session_state.get('distance_constraint', '2 km')}
                 """)
