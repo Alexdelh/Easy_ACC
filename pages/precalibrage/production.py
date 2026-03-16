@@ -583,6 +583,11 @@ def render():
                     # Ensure we drop the raw curve_data key from st.session_state representation
                     if "curve_data" in edit_state:
                          del edit_state["curve_data"]
+                    
+                    # Normaliser les coordonnées de manual_lat/manual_lng vers lat/lng
+                    if "manual_lat" in edit_state and "manual_lng" in edit_state:
+                        edit_state["lat"] = edit_state["manual_lat"]
+                        edit_state["lng"] = edit_state["manual_lng"]
                          
                     st.session_state["points_injection"][st.session_state["edit_injection_idx"]] = edit_state.copy()
                     if st.session_state.get("project_id"):
@@ -1210,7 +1215,10 @@ def render():
                                 
                                 # Définir target_index pour tous les cas (avec ou sans heures manquantes)
                                 ref_year = reference_year
+                                is_leap_ref = (ref_year % 4 == 0 and (ref_year % 100 != 0 or ref_year % 400 == 0))
                                 target_index = pd.date_range(start=f"{ref_year}-01-01 00:00:00", end=f"{ref_year}-12-31 23:00:00", freq="h")
+                                if is_leap_ref:
+                                    target_index = target_index[~((target_index.month == 2) & (target_index.day == 29))]
                                 
                                 if missing_count > 0:
                                     df_crop = df_crop.copy()

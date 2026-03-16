@@ -23,14 +23,26 @@ def fetch_tmy(lat: float, lon: float, usehorizon: bool = True) -> Tuple[pd.DataF
     lat = round(float(lat), 4)
     lon = round(float(lon), 4)
     
-    # pvlib.iotools.get_pvgis_tmy returns (data, months_selected, inputs, metadata)
-    data, _months_selected, _inputs, metadata = get_pvgis_tmy(
+    # get_pvgis_tmy can return either (data, metadata) or (data, months_selected, inputs, metadata)
+    # depending on the pvlib version. We handle both cases.
+    result = get_pvgis_tmy(
         latitude=lat,
         longitude=lon,
         outputformat='json',
         usehorizon=usehorizon,
         map_variables=True,
     )
+    
+    # Handle different return formats
+    if len(result) == 2:
+        # Newer versions: (data, metadata)
+        data, metadata = result
+    elif len(result) == 4:
+        # Older versions: (data, months_selected, inputs, metadata)
+        data, _months_selected, _inputs, metadata = result
+    else:
+        raise ValueError(f"Unexpected return format from get_pvgis_tmy: got {len(result)} values")
+    
     # Ensure column names consistent for pvlib ModelChain
     # get_pvgis_tmy returns columns like: ghi, dni, dhi, temp_air, wind_speed, etc.
     
@@ -173,6 +185,10 @@ def compute_pv_curve(
         
         # Ensure we don't go past end_date
         df = df[df.index <= end_date]
+        
+        # Remove February 29 if present (to maintain consistent 8760h years)
+        if len(df) > 0:
+            df = df[~((df.index.month == 2) & (df.index.day == 29))]
         
         # Debug: check final dataframe
         if len(df) > 0:

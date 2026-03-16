@@ -232,11 +232,12 @@ def render():
                 <thead>
                     <tr>
                         <th style="width: 8%;">Actif</th>
-                        <th style="width: 18%;">Nom</th>
+                        <th style="width: 15%;">Nom</th>
                         <th style="width: 12%;">Segment</th>
+                        <th style="width: 15%;">Point de soutirage</th>
                         <th style="width: 22%;">Adresse</th>
-                        <th style="width: 12%;">ACI</th>
-                        <th style="width: 15%;">Actions</th>
+                        <th style="width: 10%;">ACI</th>
+                        <th style="width: 13%;">Actions</th>
                     </tr>
                 </thead>
             </table>
@@ -254,7 +255,7 @@ def render():
                 else:
                     row_style = ""
                     
-                cols = st.columns([0.08, 0.18, 0.12, 0.22, 0.12, 0.15])
+                cols = st.columns([0.08, 0.15, 0.12, 0.15, 0.22, 0.10, 0.13])
 
                 with cols[0]:
                     if f"active_sout_{idx}" not in st.session_state:
@@ -272,12 +273,15 @@ def render():
                 with cols[2]:
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point['segment']}</div>", unsafe_allow_html=True)
                 with cols[3]:
+                    point_livraison = point.get('point_livraison', 'N/A')
+                    st.markdown(f"<div style='padding: 4px 0; {row_style}'>{point_livraison}</div>", unsafe_allow_html=True)
+                with cols[4]:
                     adresse_display = point.get('adresse', 'N/A')
                     st.markdown(f"<div style='padding: 4px 0; {row_style}'>{adresse_display}</div>", unsafe_allow_html=True)
-                with cols[4]:
-                    aci_text = f"✅ {point['aci_partenaire']}" if point['aci'] else "❌"
-                    st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
                 with cols[5]:
+                    aci_text = f"✅ {point['aci_partenaire']}" if point.get('aci', False) else "❌"
+                    st.markdown(f"<div style='padding: 4px 0;'>{aci_text}</div>", unsafe_allow_html=True)
+                with cols[6]:
                     action_cols = st.columns([1, 1, 1], gap="small")
                     with action_cols[0]:
                         if st.button("✏️", key=f"edit_s_{idx}", help="Modifier", width='stretch'):
@@ -491,6 +495,11 @@ def render():
                     # Ensure we drop the raw curve_data key from st.session_state representation
                     if "curve_data" in edit_state:
                          del edit_state["curve_data"]
+                    
+                    # Normaliser les coordonnées de manual_lat/manual_lng vers lat/lng
+                    if "manual_lat" in edit_state and "manual_lng" in edit_state:
+                        edit_state["lat"] = edit_state["manual_lat"]
+                        edit_state["lng"] = edit_state["manual_lng"]
                          
                     idx = st.session_state["edit_soutirage_idx"]
                     st.session_state["points_soutirage"][idx] = edit_state.copy()
