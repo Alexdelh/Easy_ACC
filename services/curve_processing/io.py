@@ -100,7 +100,18 @@ def read_curve(file_or_df: Any) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce", dayfirst=True)
     df = df[df["datetime"].notna()]
     if df["datetime"].dt.tz is not None:
-        df["datetime"] = df["datetime"].dt.tz_localize(None)
+        if fmt in ("ALEX", "EMS"):
+            # ALEX et EMS : timestamps UTC (suffixe Z) → conversion en heure locale Paris
+            # avant suppression de la timezone pour que ex. 2022-12-31 23:00 UTC
+            # devienne 2023-01-01 00:00 (Paris) et reste dans l'année calendaire correcte.
+            # Le décalage est +1h en hiver (CET) et +2h en été (CEST) — géré automatiquement.
+            df["datetime"] = (
+                df["datetime"]
+                .dt.tz_convert("Europe/Paris")
+                .dt.tz_localize(None)
+            )
+        else:
+            df["datetime"] = df["datetime"].dt.tz_localize(None)
 
     # Parsing Valeur : gestion des virgules françaises
     df["value"] = df["value"].astype(str).str.replace(",", ".").apply(pd.to_numeric, errors="coerce")
@@ -165,6 +176,12 @@ def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]
         parsed = pd.to_datetime(vals, errors="coerce", dayfirst=True)
         return parsed.notna().mean()
 
+    # 0) SGE : détection prioritaire par noms de colonnes (avant tout le reste)
+    # Les noms Horodate/Valeur sont uniques au format SGE et sans ambiguïté.
+    cols_lower = [str(c).lower().strip() for c in cols]
+    if "horodate" in cols_lower and "valeur" in cols_lower:
+        return cols[cols_lower.index("horodate")], cols[cols_lower.index("valeur")], "SGE"
+
     # 1) PVGIS : Signature YYYYMMDD:HHMM + 2 colonnes
     if num_cols == 2:
         if (
@@ -182,10 +199,18 @@ def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]
         ):
             return cols[0], cols[1], "Archelios"
 
-    # 3) EMS : ISO avec T et Z  (format: nom;date;ID_variable;valeur)
+    # 3) ALEX : ISO avec T et Z + exactement 2 colonnes (datetime;valeur)
+    iso_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+    if num_cols == 2:
+        if (
+            match_ratio(sample_df.iloc[:, 0], iso_pattern) >= 0.7
+            and numeric_ratio(sample_df.iloc[:, 1]) >= 0.7
+        ):
+            return cols[0], cols[1], "ALEX"
+
+    # 4) EMS : ISO avec T et Z + plusieurs colonnes (format: nom;date;ID_variable;valeur)
     # On prend la DERNIÈRE colonne numérique après la date (pas l'ID de variable
     # qui est lui aussi numérique mais grand entier situé avant la vraie valeur).
-    iso_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
     for i in range(num_cols):
         if match_ratio(sample_df.iloc[:, i], iso_pattern) >= 0.7:
             # Chercher toutes les colonnes numériques après la colonne date
@@ -196,11 +221,6 @@ def _detect_format(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], str]
             if numeric_candidates:
                 # Prendre la dernière colonne numérique (la valeur, pas l'ID)
                 return cols[i], cols[numeric_candidates[-1]], "EMS"
-
-    # 4) SGE : priorité aux noms de colonnes
-    cols_lower = [str(c).lower().strip() for c in cols]
-    if "horodate" in cols_lower and "valeur" in cols_lower:
-        return cols[cols_lower.index("horodate")], cols[cols_lower.index("valeur")], "SGE"
 
     # 5) SGE : heuristique si headers absents/renommés
     if num_cols >= 8:

@@ -854,8 +854,9 @@ def render():
                 if not isinstance(df.index, pd.DatetimeIndex) or "value" not in df.columns:
                     return False
                 df_sorted = df.sort_index()
-                src_year = df_sorted.index[0].year
-                full_range = pd.date_range(start=f"{src_year}-01-01 00:00:00", end=f"{src_year}-12-31 23:00:00", freq='h')
+                min_year = df_sorted.index[0].year
+                max_year = df_sorted.index[-1].year
+                full_range = pd.date_range(start=f"{min_year}-01-01 00:00:00", end=f"{max_year}-12-31 23:00:00", freq='h')
                 df_full = df_sorted.reindex(full_range)
                 max_len = 0
                 current_len = 0
@@ -967,21 +968,22 @@ def render():
                             continue
                         # Recherche de la plus longue plage consécutive >= 8736h
                         df_sorted = df.sort_index()
-                        # Toujours étendre sur l'année source complète (01/01 00:00 → 31/12 23:00)
-                        # pour que les heures supprimées à l'import soient présentes avec NaN
-                        src_year = df_sorted.index[0].year
-                        full_range = pd.date_range(
-                            start=f"{src_year}-01-01 00:00:00",
-                            end=f"{src_year}-12-31 23:00:00",
+                        # Créer une plage couvrant TOUTES les années présentes pour le check
+                        # (cas ALEX : données démarrant le 2022-12-31 et couvrant 2023)
+                        min_year = df_sorted.index[0].year
+                        max_year = df_sorted.index[-1].year
+                        full_range_check = pd.date_range(
+                            start=f"{min_year}-01-01 00:00:00",
+                            end=f"{max_year}-12-31 23:00:00",
                             freq='h'
                         )
-                        df_full = df_sorted.reindex(full_range)
+                        df_check = df_sorted.reindex(full_range_check)
                         max_len = 0
                         best_start = None
                         best_end = None
                         current_start = None
                         current_len = 0
-                        for ts, val in df_full['value'].items():
+                        for ts, val in df_check['value'].items():
                             if not pd.isna(val):
                                 if current_start is None:
                                     current_start = ts
@@ -998,7 +1000,18 @@ def render():
                         if max_len >= 8736:
                             plages_valides.append((best_start, best_end))
                             noms_valides.append(nom)
-                            courbes_valides.append(df_full)
+                            # Déterminer l'année dominante dans la plage valide
+                            # (cas ALEX : données démarrant le 2022-12-31 → année dominante = 2023)
+                            df_valid = df_sorted[
+                                (df_sorted.index >= best_start) & (df_sorted.index <= best_end)
+                            ]
+                            src_year = int(df_valid.index.to_series().dt.year.value_counts().index[0])
+                            src_full_index = pd.date_range(
+                                start=f"{src_year}-01-01 00:00:00",
+                                end=f"{src_year}-12-31 23:00:00",
+                                freq='h'
+                            )
+                            courbes_valides.append(df_sorted.reindex(src_full_index))
                         else:
                             st.error(f"{nom} : courbe trop courte (max {max_len}h consécutives, minimum requis : 8736h)")
                 if courbes_valides:
@@ -1014,8 +1027,12 @@ def render():
                                 df_conso = None
                                 st.session_state["df_conso"] = df_conso
                                 return
+                        data_years = set(df_full.index.year)
+                        # reference_year est fixé par l'utilisateur dans 'Infos générales'
+                        # S'il n'est pas encore défini, utiliser l'année dominante des données
                         if reference_year is None:
-                            reference_year = df_full.index[0].year
+                            year_counts = df_full.index.to_series().dt.year.value_counts()
+                            reference_year = int(year_counts.index[0])
                             st.session_state["reference_year"] = reference_year
 
                         # Index cible : année de référence sans 29 fév si bissextile
@@ -1024,8 +1041,7 @@ def render():
                         if is_leap_ref:
                             target_index = target_index[~((target_index.month == 2) & (target_index.day == 29))]
 
-                        start = df_full.index.min()
-                        if start.year == reference_year:
+                        if reference_year in data_years:
                             df_aligned = df_full.reindex(target_index)
                         else:
                             try:
@@ -1037,16 +1053,10 @@ def render():
                                 st.session_state["df_conso"] = df_conso
                                 return
 
-                        missing_datetimes = [dt for dt in target_index if pd.isna(df_aligned.loc[dt, 'value'])]
-                        missing_count = len(missing_datetimes)
-                        df_crop = df_aligned.copy()
-                        if missing_count > 0:
-                            # Remplissage automatique à 0 pour les valeurs manquantes
-                            for dt in missing_datetimes:
-                                df_crop.loc[dt, "value"] = 0.0
-                            df_crop = df_crop.sort_index()
-                        # Remplir tous les NaN/None restants à 0.0
-                        df_crop['value'] = df_crop['value'].fillna(0.0).astype(float)
+                        df_crop = df_aligned.copy().sort_index()
+                        # Propagation voisin pour les NaN d'effet de bord (ex. UTC→Paris)
+                        # Dernier recours à 0 pour les trous sans voisin
+                        df_crop['value'] = df_crop['value'].ffill().bfill().fillna(0.0).astype(float)
                         df_named = df_crop[["value"]].rename(columns={"value": nom})
                         if not isinstance(df_named.index, pd.DatetimeIndex):
                             df_named.index = pd.to_datetime(df_named.index)
@@ -1061,8 +1071,11 @@ def render():
                         best_start, best_end, mask_dict = find_max_common_calendar_range(courbes_valides)
                         if best_start is not None and best_end is not None:
                             reference_year = st.session_state.get("reference_year")
+                            # reference_year est fixé par l'utilisateur dans 'Infos générales'
+                            # S'il n'est pas encore défini, utiliser l'année dominante du premier consommateur
                             if reference_year is None:
-                                reference_year = courbes_valides[0].index[0].year
+                                year_counts = courbes_valides[0].index.to_series().dt.year.value_counts()
+                                reference_year = int(year_counts.index[0])
                                 st.session_state["reference_year"] = reference_year
                             is_leap_ref = (reference_year % 4 == 0 and (reference_year % 100 != 0 or reference_year % 400 == 0))
                             target_index = pd.date_range(start=f"{reference_year}-01-01 00:00:00", end=f"{reference_year}-12-31 23:00:00", freq="h")
@@ -1072,26 +1085,20 @@ def render():
                                 nom = noms_valides[i]
                                 mask = mask_dict[i]
                                 df_crop = df_full[mask].copy()
-                                missing_datetimes = [dt for dt in target_index if dt not in df_crop.index or pd.isna(df_crop.loc[dt, 'value'] if dt in df_crop.index else np.nan)]
-                                missing_count = len(missing_datetimes)
-                                if missing_count > 0:
-                                    # Remplissage automatique à 0 pour les valeurs manquantes
-                                    for dt in missing_datetimes:
-                                        df_crop.loc[dt, "value"] = 0.0
-                                    df_crop = df_crop.sort_index()
-                                # Reindex direct si même année, sinon alignement calendaire
+                                # Reindex direct si même année, sinon alignement calendaire sur l'année complète
                                 src_year_crop = df_crop.index[0].year if len(df_crop) > 0 else None
                                 if src_year_crop == reference_year:
                                     df_aligned = df_crop.reindex(target_index)
                                 else:
                                     try:
-                                        df_aligned = align_curve_to_reference_year(df_crop, reference_year)
+                                        # Aligner sur df_full (année complète), pas df_crop (plage commune)
+                                        df_aligned = align_curve_to_reference_year(df_full, reference_year)
                                         df_aligned = df_aligned.reindex(target_index)
                                     except CalendarAlignmentError as err:
                                         st.error(f"Erreur d'alignement calendaire pour {nom} : {err}")
                                         continue
-                                # Remplir les NaN restants à 0
-                                df_aligned['value'] = df_aligned['value'].fillna(0.0).astype(float)
+                                # Propagation voisin pour les NaN d'effet de bord, dernier recours à 0
+                                df_aligned['value'] = df_aligned['value'].ffill().bfill().fillna(0.0).astype(float)
                                 df_named = df_aligned[["value"]].rename(columns={"value": nom})
                                 if not isinstance(df_named.index, pd.DatetimeIndex):
                                     df_named.index = pd.to_datetime(df_named.index)
