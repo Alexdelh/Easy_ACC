@@ -357,6 +357,20 @@ def render():
                         if st.button("✏️", key=f"edit_{idx}", help="Modifier", width='stretch'):
                             st.session_state["edit_injection_idx"] = idx
                             st.session_state["edit_injection_form"] = point.copy()
+                            # récupérer coords proprement
+                            coords = point.get("coords")
+                            lat = None
+                            lng = None
+                            if coords:
+                                lat = coords.get("lat")
+                                lng = coords.get("lng")
+                            if lat is None:
+                                lat = point.get("lat", 0.0)
+                            if lng is None:
+                                lng = point.get("lng", 0.0)
+                            # BONNES clés
+                            st.session_state["edit_inj_lat"] = lat
+                            st.session_state["edit_inj_lng"] = lng
                             st.rerun()
                     with action_cols[1]:
                         if st.button("📋", key=f"dup_{idx}", help="Dupliquer", width='stretch'):
