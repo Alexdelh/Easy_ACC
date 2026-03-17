@@ -60,9 +60,27 @@ def render_sidebar_precalibrage():
 
         # Prev/Next controls
         col_prev, col_next = st.columns(2, gap="small")
+
+        def _nav_save():
+            """Sauvegarde silencieuse à chaque navigation entre pages."""
+            project_id = st.session_state.get("project_id")
+            if project_id:
+                try:
+                    from services.database import save_project
+                    from services.state_serializer import serialize_state
+                    save_project(
+                        name=st.session_state.get("project_name", "Sans titre"),
+                        current_phase="precalibrage",
+                        state_dict=serialize_state(dict(st.session_state)),
+                        project_id=project_id,
+                    )
+                except Exception:
+                    pass  # Navigation must never be blocked by a save error
+
         with col_prev:
             if current_page > 0: # Allow going back to Projets (0)
                 if st.button("← Précédent", width='stretch', key=f"prev_{current_page}"):
+                    _nav_save()
                     st.session_state["precalibrage_page"] = current_page - 1
                     st.rerun()
             else:
@@ -70,10 +88,12 @@ def render_sidebar_precalibrage():
         with col_next:
             if current_page < max(PRECALIBRAGE_MENU.keys()):
                 if st.button("Suivant →", width='stretch', key=f"next_{current_page}"):
+                    _nav_save()
                     st.session_state["precalibrage_page"] = current_page + 1
                     st.rerun()
             else:
                 st.button("Suivant →", disabled=True, width='stretch')
+
 
         # Generate button only on last page
         if current_page == max(PRECALIBRAGE_MENU.keys()):
