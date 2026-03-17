@@ -287,6 +287,9 @@ def render():
                         if st.button("✏️", key=f"edit_s_{idx}", help="Modifier", width='stretch'):
                             st.session_state["edit_soutirage_idx"] = idx
                             st.session_state["edit_soutirage_form"] = point.copy()
+                            coords = point.get("coords") or {"lat": point.get("lat"), "lng": point.get("lng")}
+                            st.session_state["edit_sout_lat"] = coords.get("lat", 0.0)
+                            st.session_state["edit_sout_lng"] = coords.get("lng", 0.0)
                             st.rerun()
                     with action_cols[1]:
                         if st.button("📋", key=f"dup_s_{idx}", help="Dupliquer", width='stretch'):
