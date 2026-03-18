@@ -9,7 +9,7 @@ idna==3.11
 Jinja2==3.1.6
 kaleido==0.2.1
 MarkupSafe==3.0.3
-numpy==2.3.5
+numpy<2
 openpyxl>=3.1.0
 pandas>=2.0.0
 plotly==5.18.0
@@ -22,3 +22,10 @@ watchdog==6.0.0
 xyzservices==2025.11.0
 streamlit==1.53.1
 python-docx==1.2.0
+matplotlib==3.10.3
+seaborn==0.13.2
+scipy==1.16.1
+pyarrow==12.0.1
+ipykernel==6.29.5
+jupyter==1.1.1
+pytest==8.4.1
