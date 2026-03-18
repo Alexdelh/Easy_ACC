@@ -525,309 +525,310 @@ def render():
 
         st.divider()
 
-        # Section 2: Add form (simple form with direct curve display)
-        st.subheader("Ajouter un point de soutirage")
+        # Section 2: Add form — masqué pendant l'édition
+        if st.session_state["edit_soutirage_idx"] is None:
+            st.subheader("Ajouter un point de soutirage")
         
-        # Initialize form state if needed
-        if "sout_form_state" not in st.session_state:
-            st.session_state["sout_form_state"] = {
-                "nom": "", "point_livraison": "", "segment": "",
-                "aci": False,
-                "adresse": "",
-                "curve_data": None, "coords": None
-            }
-        
-        state = st.session_state["sout_form_state"]
-        
-        # Input form
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
-            state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
-        
-        with col2:
-            state["adresse"] = st.text_input("Adresse", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
-            
-            # Auto-géolocalisation si adresse remplie
-            if state["adresse"] and state["adresse"] != state.get("last_geocoded_address", ""):
-                with st.spinner("Géolocalisation..."):
-                    coords = get_coordinates_from_address(state["adresse"])
-                    if coords and coords.get("lat") and coords.get("lng"):
-                        state["coords"] = coords
-                        state["manual_lat"] = coords["lat"]
-                        state["manual_lng"] = coords["lng"]
-                        # Mettre à jour les widgets directement
-                        st.session_state["sout_lat"] = coords["lat"]
-                        st.session_state["sout_lng"] = coords["lng"]
-                        state["last_geocoded_address"] = state["adresse"]
-                    else:
-                        st.warning("⚠️ Géolocalisation impossible pour cette adresse")
-            
-            # Initialiser les coordonnées manuelles si nécessaire
-            if "manual_lat" not in state:
-                state["manual_lat"] = (state.get("coords") or {}).get("lat", 0.0)
-            if "manual_lng" not in state:
-                state["manual_lng"] = (state.get("coords") or {}).get("lng", 0.0)
-            
-            # Initialiser les widgets dans session_state pour éviter le warning
-            if "sout_lat" not in st.session_state:
-                st.session_state["sout_lat"] = float(state["manual_lat"])
-            if "sout_lng" not in st.session_state:
-                st.session_state["sout_lng"] = float(state["manual_lng"])
-            
-            # Afficher lat/lon éditables
-            col_lat, col_lng = st.columns(2)
-            with col_lat:
-                state["manual_lat"] = st.number_input(
-                    "Latitude", 
-                    format="%.6f",
-                    step=0.001,
-                    key="sout_lat"
-                )
-            with col_lng:
-                state["manual_lng"] = st.number_input(
-                    "Longitude", 
-                    format="%.6f",
-                    step=0.001,
-                    key="sout_lng"
-                )
-            
-            # Mettre à jour coords avec les valeurs manuelles
-            if state["manual_lat"] != 0.0 or state["manual_lng"] != 0.0:
-                state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
-        
-        with col3:
-            state["point_livraison"] = st.text_input("Point de livraison", value=state.get("point_livraison", ""), placeholder="12345678901234")
-            
-            # Get list of injection points for ACI partner dropdown
-            injection_points = st.session_state.get("points_injection", [])
-            # Créer un mapping PDL -> nom et une liste d'affichage avec PDL (ou nom si PDL vide)
-            pdl_to_name = {}
-            injection_display = []
-            for p in injection_points:
-                pdl = p.get("point_de_livraison", "")
-                name = p["nom"]
-                # Afficher le PDL s'il existe, sinon le nom
-                display_value = pdl if pdl else name
-                pdl_to_name[display_value] = name
-                injection_display.append(display_value)
-            
-            # Get already used ACI partners from existing soutirage points (stockés avec les noms)
-            used_aci_partners = {
-                p["aci_partenaire"] 
-                for p in st.session_state.get("points_soutirage", []) 
-                if p.get("aci") and p.get("aci_partenaire")
-            }
-            
-            # Filter out already used injection points based on names
-            available_injection_display = [pdl for pdl, name in pdl_to_name.items() if name not in used_aci_partners]
-            
-            # Disable ACI checkbox if no injection points available
-            has_available_injection_points = len(available_injection_display) > 0
-            if not has_available_injection_points:
-                state["aci"] = False  # Force ACI to False if no injection points available
-            
-            # Determine help message
-            if len(injection_display) == 0:
-                aci_help = "Nécessite au moins un point d'injection"
-            elif not has_available_injection_points:
-                aci_help = "Tous les points d'injection sont déjà en ACI"
-            else:
-                aci_help = None
-            
-            state["aci"] = st.checkbox(
-                "Contrat ACI", 
-                value=state["aci"], 
-                disabled=not has_available_injection_points,
-                help=aci_help
-            )
-            
-            if has_available_injection_points:
-                # Trouver le PDL/nom correspondant au nom actuel
-                current_display = None
-                if state.get("aci_partenaire"):
-                    for display_val, name in pdl_to_name.items():
-                        if name == state.get("aci_partenaire") and display_val in available_injection_display:
-                            current_display = display_val
-                            break
-                
-                current_index = 0
-                if current_display and current_display in available_injection_display:
-                    current_index = available_injection_display.index(current_display)
-                
-                selected_display = st.selectbox(
-                    "Partenaire ACI", 
-                    available_injection_display, 
-                    index=current_index,
-                    disabled=not state["aci"]
-                )
-                # Convertir le PDL/nom sélectionné en nom pour le stockage
-                state["aci_partenaire"] = pdl_to_name.get(selected_display, selected_display)
-            else:
-                placeholder = "Aucun point d'injection" if len(injection_display) == 0 else "Tous les points d'injection sont déjà en ACI"
-                st.selectbox("Partenaire ACI", [placeholder], disabled=True)
-                state["aci_partenaire"] = None
-        
-        # Curve upload
-        st.markdown("**Courbe de consommation**")
-        
-        # Two-column layout: upload on left, preview on right
-        col_curve1, col_curve2 = st.columns([1, 1])
-        
-        with col_curve1:
-            uploaded_file = st.file_uploader(
-                "Charger CSV/XLS/XLSX",
-                type=["csv", "xls", "xlsx"],
-                key="upload_curve_sout",
-            )
-            if uploaded_file:
-                try:
-                    name = uploaded_file.name.lower()
-                    if name.endswith(".csv"):
-                        # Use sep=None with python engine for auto-detection of separator (handles ; or ,)
-                        curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
-                        # Clean column names (remove BOM and whitespace)
-                        curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
-                    else:
-                        curve_df = pd.read_excel(uploaded_file)
-                    state["curve_data"] = curve_df
-                    st.success("✅ Fichier chargé")
-                except Exception as e:
-                    st.error(f"⚠️ Erreur lecture fichier: {e}")
-                    state["curve_data"] = None
-        
-        with col_curve2:
-            # Display curve preview if available
-            if state["curve_data"] is not None:
-                st.markdown("**📊 Aperçu**")
-                try:
-                    result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
-
-                    if result.get('success') and result.get('df') is not None and len(result['df']) > 0:
-                        norm_df = result['df']
-                        # Plot only the numeric 'value' series if present
-                        if 'value' in norm_df.columns:
-                            st.line_chart(norm_df['value'], width='stretch', height=300)
-                        else:
-                            st.line_chart(norm_df, width='stretch', height=300)
-
-                        st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
-
-                        # Calculer le volume consommé
-                        if 'value' in norm_df.columns:
-                            volume_total = norm_df['value'].sum()
-                            volume_mwh = volume_total / 1000.0
-                            st.metric("Volume consommé estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
-                    else:
-                        st.warning("⚠️ Courbe non exploitable pour l'affichage.")
-                        if result.get('errors'):
-                            st.error(f"Erreurs: {result['errors']}")
-                        validation = result.get('validation') or {}
-                        if validation.get('errors'):
-                            st.error(f"Validation: {validation['errors']}")
-                except Exception as e:
-                    st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
-            else:
-                st.info("↖️ Chargez un fichier pour voir l'aperçu")
-        
-        st.divider()
-        
-        # Validation button (always visible)
-        col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
-        
-        with col_btn1:
-            if st.button("✅ Valider et ajouter le point", width='stretch', type="primary"):
-                # Validate all required fields
-                if not state["nom"]:
-                    st.error("⚠️ Le champ Nom est obligatoire")
-                elif state["curve_data"] is None:
-                    st.error("⚠️ Une courbe de consommation est obligatoire")
-                else:
-                    # Get coordinates if not already done
-                    if not state["coords"]:
-                        # Try geocoding from address if provided
-                        if state["adresse"]:
-                            coords = get_coordinates_from_address(state["adresse"])
-                            if coords and coords.get("lat") and coords.get("lng"):
-                                state["coords"] = coords
-                        # Otherwise check if manual lat/lon are provided
-                        elif state["manual_lat"] != 0.0 and state["manual_lng"] != 0.0:
-                            state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
-                    
-                    # Final validation: coords must be set
-                    if not state["coords"] or not state["coords"].get("lat") or not state["coords"].get("lng"):
-                        st.error("⚠️ Coordonnées GPS manquantes. Renseignez l'adresse ou la latitude/longitude")
-                        state["coords"] = None
-                    
-                    if state["coords"]:
-                        # Process uploaded curve and store processing result
-                        processed = None
-                        try:
-                            processed = process_curve(state["curve_data"]) if state.get("curve_data") is not None else None
-                        except Exception as e:
-                            st.error(f"Erreur traitement courbe: {e}")
-
-                        # Create and add point (store processed result dict so aggregation can read it)
-                        new_point = {
-                            "nom": state["nom"],
-                            "point_livraison": state.get("point_livraison", ""),
-                            "segment": state["segment"],
-                            "aci": state["aci"],
-                            "aci_partenaire": state["aci_partenaire"] if state["aci"] else "Aucun",
-                            "adresse": state["adresse"],
-                            "active": True,
-                            # Store either raw df or processed dict; processed preferred
-                            "courbe_consommation": (
-                                {"df": processed.get("df"), "metadata": processed.get("metadata"), "impute_report": processed.get("impute_report")} 
-                                if processed and processed.get("success") else state.get("curve_data")
-                            ),
-                            "lat": state["coords"]["lat"],
-                            "lng": state["coords"]["lng"]
-                        }
-                        st.session_state["points_soutirage"].append(new_point)
-                        
-                        # Auto-save Dataset
-                        project_id = st.session_state.get("project_id")
-                        if project_id and state.get("curve_data") is not None:
-                            try:
-                                from services.database import save_dataset
-                                save_dataset(
-                                    project_id=project_id,
-                                    name=f"{state['nom']}_curve.json",
-                                    type="consumption_curve",
-                                    data=state["curve_data"],
-                                    metadata={"original_name": state["nom"], "address": state["adresse"]},
-                                )
-                            except Exception as e:
-                                st.error(f"⚠️ Erreur sauvegarde auto dataset: {e}")
-                        
-                        # Auto-save Project
-                        if project_id:
-                            from services.database import save_project
-                            from services.state_serializer import serialize_state
-                            save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), project_id)
-                        
-                        st.success(f"✅ Point '{state['nom']}' ajouté et sauvegardé avec succès!")
-                        
-                        # Reset form state
-                        st.session_state["sout_form_state"] = {
-                            "nom": "", "point_livraison": "", "segment": "",
-                            "aci": False, "aci_partenaire": "Aucun",
-                            "adresse": "",
-                            "curve_data": None, "coords": None
-                        }
-                        st.rerun()
-        
-        with col_btn2:
-            if st.button("🔄 Réinitialiser", width='stretch'):
+            # Initialize form state if needed
+            if "sout_form_state" not in st.session_state:
                 st.session_state["sout_form_state"] = {
                     "nom": "", "point_livraison": "", "segment": "",
-                    "aci": False, "aci_partenaire": "Aucun",
+                    "aci": False,
                     "adresse": "",
                     "curve_data": None, "coords": None
                 }
-                st.rerun()
+        
+            state = st.session_state["sout_form_state"]
+        
+            # Input form
+            col1, col2, col3 = st.columns(3)
+        
+            with col1:
+                state["nom"] = st.text_input("Nom *", value=state["nom"], placeholder="Bâtiment municipal")
+                state["segment"] = st.text_input("Segment", value=state["segment"], placeholder="C5")
+        
+            with col2:
+                state["adresse"] = st.text_input("Adresse", value=state["adresse"], placeholder="123 Rue de la Ville, 75001 Paris")
+            
+                # Auto-géolocalisation si adresse remplie
+                if state["adresse"] and state["adresse"] != state.get("last_geocoded_address", ""):
+                    with st.spinner("Géolocalisation..."):
+                        coords = get_coordinates_from_address(state["adresse"])
+                        if coords and coords.get("lat") and coords.get("lng"):
+                            state["coords"] = coords
+                            state["manual_lat"] = coords["lat"]
+                            state["manual_lng"] = coords["lng"]
+                            # Mettre à jour les widgets directement
+                            st.session_state["sout_lat"] = coords["lat"]
+                            st.session_state["sout_lng"] = coords["lng"]
+                            state["last_geocoded_address"] = state["adresse"]
+                        else:
+                            st.warning("⚠️ Géolocalisation impossible pour cette adresse")
+            
+                # Initialiser les coordonnées manuelles si nécessaire
+                if "manual_lat" not in state:
+                    state["manual_lat"] = (state.get("coords") or {}).get("lat", 0.0)
+                if "manual_lng" not in state:
+                    state["manual_lng"] = (state.get("coords") or {}).get("lng", 0.0)
+            
+                # Initialiser les widgets dans session_state pour éviter le warning
+                if "sout_lat" not in st.session_state:
+                    st.session_state["sout_lat"] = float(state["manual_lat"])
+                if "sout_lng" not in st.session_state:
+                    st.session_state["sout_lng"] = float(state["manual_lng"])
+            
+                # Afficher lat/lon éditables
+                col_lat, col_lng = st.columns(2)
+                with col_lat:
+                    state["manual_lat"] = st.number_input(
+                        "Latitude", 
+                        format="%.6f",
+                        step=0.001,
+                        key="sout_lat"
+                    )
+                with col_lng:
+                    state["manual_lng"] = st.number_input(
+                        "Longitude", 
+                        format="%.6f",
+                        step=0.001,
+                        key="sout_lng"
+                    )
+            
+                # Mettre à jour coords avec les valeurs manuelles
+                if state["manual_lat"] != 0.0 or state["manual_lng"] != 0.0:
+                    state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
+        
+            with col3:
+                state["point_livraison"] = st.text_input("Point de livraison", value=state.get("point_livraison", ""), placeholder="12345678901234")
+            
+                # Get list of injection points for ACI partner dropdown
+                injection_points = st.session_state.get("points_injection", [])
+                # Créer un mapping PDL -> nom et une liste d'affichage avec PDL (ou nom si PDL vide)
+                pdl_to_name = {}
+                injection_display = []
+                for p in injection_points:
+                    pdl = p.get("point_de_livraison", "")
+                    name = p["nom"]
+                    # Afficher le PDL s'il existe, sinon le nom
+                    display_value = pdl if pdl else name
+                    pdl_to_name[display_value] = name
+                    injection_display.append(display_value)
+            
+                # Get already used ACI partners from existing soutirage points (stockés avec les noms)
+                used_aci_partners = {
+                    p["aci_partenaire"] 
+                    for p in st.session_state.get("points_soutirage", []) 
+                    if p.get("aci") and p.get("aci_partenaire")
+                }
+            
+                # Filter out already used injection points based on names
+                available_injection_display = [pdl for pdl, name in pdl_to_name.items() if name not in used_aci_partners]
+            
+                # Disable ACI checkbox if no injection points available
+                has_available_injection_points = len(available_injection_display) > 0
+                if not has_available_injection_points:
+                    state["aci"] = False  # Force ACI to False if no injection points available
+            
+                # Determine help message
+                if len(injection_display) == 0:
+                    aci_help = "Nécessite au moins un point d'injection"
+                elif not has_available_injection_points:
+                    aci_help = "Tous les points d'injection sont déjà en ACI"
+                else:
+                    aci_help = None
+            
+                state["aci"] = st.checkbox(
+                    "Contrat ACI", 
+                    value=state["aci"], 
+                    disabled=not has_available_injection_points,
+                    help=aci_help
+                )
+            
+                if has_available_injection_points:
+                    # Trouver le PDL/nom correspondant au nom actuel
+                    current_display = None
+                    if state.get("aci_partenaire"):
+                        for display_val, name in pdl_to_name.items():
+                            if name == state.get("aci_partenaire") and display_val in available_injection_display:
+                                current_display = display_val
+                                break
+                
+                    current_index = 0
+                    if current_display and current_display in available_injection_display:
+                        current_index = available_injection_display.index(current_display)
+                
+                    selected_display = st.selectbox(
+                        "Partenaire ACI", 
+                        available_injection_display, 
+                        index=current_index,
+                        disabled=not state["aci"]
+                    )
+                    # Convertir le PDL/nom sélectionné en nom pour le stockage
+                    state["aci_partenaire"] = pdl_to_name.get(selected_display, selected_display)
+                else:
+                    placeholder = "Aucun point d'injection" if len(injection_display) == 0 else "Tous les points d'injection sont déjà en ACI"
+                    st.selectbox("Partenaire ACI", [placeholder], disabled=True)
+                    state["aci_partenaire"] = None
+        
+            # Curve upload
+            st.markdown("**Courbe de consommation**")
+        
+            # Two-column layout: upload on left, preview on right
+            col_curve1, col_curve2 = st.columns([1, 1])
+        
+            with col_curve1:
+                uploaded_file = st.file_uploader(
+                    "Charger CSV/XLS/XLSX",
+                    type=["csv", "xls", "xlsx"],
+                    key="upload_curve_sout",
+                )
+                if uploaded_file:
+                    try:
+                        name = uploaded_file.name.lower()
+                        if name.endswith(".csv"):
+                            # Use sep=None with python engine for auto-detection of separator (handles ; or ,)
+                            curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
+                            # Clean column names (remove BOM and whitespace)
+                            curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
+                        else:
+                            curve_df = pd.read_excel(uploaded_file)
+                        state["curve_data"] = curve_df
+                        st.success("✅ Fichier chargé")
+                    except Exception as e:
+                        st.error(f"⚠️ Erreur lecture fichier: {e}")
+                        state["curve_data"] = None
+        
+            with col_curve2:
+                # Display curve preview if available
+                if state["curve_data"] is not None:
+                    st.markdown("**📊 Aperçu**")
+                    try:
+                        result = process_curve(state["curve_data"]) if state.get("curve_data") is not None else {"success": False}
+
+                        if result.get('success') and result.get('df') is not None and len(result['df']) > 0:
+                            norm_df = result['df']
+                            # Plot only the numeric 'value' series if present
+                            if 'value' in norm_df.columns:
+                                st.line_chart(norm_df['value'], width='stretch', height=300)
+                            else:
+                                st.line_chart(norm_df, width='stretch', height=300)
+
+                            st.caption(f"Colonnes: {', '.join(norm_df.columns.astype(str))} — Lignes: {len(norm_df)}")
+
+                            # Calculer le volume consommé
+                            if 'value' in norm_df.columns:
+                                volume_total = norm_df['value'].sum()
+                                volume_mwh = volume_total / 1000.0
+                                st.metric("Volume consommé estimé", f"{volume_mwh:.2f} MWh", help=f"{volume_total:.0f} kWh sur la période")
+                        else:
+                            st.warning("⚠️ Courbe non exploitable pour l'affichage.")
+                            if result.get('errors'):
+                                st.error(f"Erreurs: {result['errors']}")
+                            validation = result.get('validation') or {}
+                            if validation.get('errors'):
+                                st.error(f"Validation: {validation['errors']}")
+                    except Exception as e:
+                        st.warning(f"⚠️ Erreur lors de la normalisation: {e}")
+                else:
+                    st.info("↖️ Chargez un fichier pour voir l'aperçu")
+        
+            st.divider()
+        
+            # Validation button (always visible)
+            col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
+        
+            with col_btn1:
+                if st.button("✅ Valider et ajouter le point", width='stretch', type="primary"):
+                    # Validate all required fields
+                    if not state["nom"]:
+                        st.error("⚠️ Le champ Nom est obligatoire")
+                    elif state["curve_data"] is None:
+                        st.error("⚠️ Une courbe de consommation est obligatoire")
+                    else:
+                        # Get coordinates if not already done
+                        if not state["coords"]:
+                            # Try geocoding from address if provided
+                            if state["adresse"]:
+                                coords = get_coordinates_from_address(state["adresse"])
+                                if coords and coords.get("lat") and coords.get("lng"):
+                                    state["coords"] = coords
+                            # Otherwise check if manual lat/lon are provided
+                            elif state["manual_lat"] != 0.0 and state["manual_lng"] != 0.0:
+                                state["coords"] = {"lat": state["manual_lat"], "lng": state["manual_lng"]}
+                    
+                        # Final validation: coords must be set
+                        if not state["coords"] or not state["coords"].get("lat") or not state["coords"].get("lng"):
+                            st.error("⚠️ Coordonnées GPS manquantes. Renseignez l'adresse ou la latitude/longitude")
+                            state["coords"] = None
+                    
+                        if state["coords"]:
+                            # Process uploaded curve and store processing result
+                            processed = None
+                            try:
+                                processed = process_curve(state["curve_data"]) if state.get("curve_data") is not None else None
+                            except Exception as e:
+                                st.error(f"Erreur traitement courbe: {e}")
+
+                            # Create and add point (store processed result dict so aggregation can read it)
+                            new_point = {
+                                "nom": state["nom"],
+                                "point_livraison": state.get("point_livraison", ""),
+                                "segment": state["segment"],
+                                "aci": state["aci"],
+                                "aci_partenaire": state["aci_partenaire"] if state["aci"] else "Aucun",
+                                "adresse": state["adresse"],
+                                "active": True,
+                                # Store either raw df or processed dict; processed preferred
+                                "courbe_consommation": (
+                                    {"df": processed.get("df"), "metadata": processed.get("metadata"), "impute_report": processed.get("impute_report")} 
+                                    if processed and processed.get("success") else state.get("curve_data")
+                                ),
+                                "lat": state["coords"]["lat"],
+                                "lng": state["coords"]["lng"]
+                            }
+                            st.session_state["points_soutirage"].append(new_point)
+                        
+                            # Auto-save Dataset
+                            project_id = st.session_state.get("project_id")
+                            if project_id and state.get("curve_data") is not None:
+                                try:
+                                    from services.database import save_dataset
+                                    save_dataset(
+                                        project_id=project_id,
+                                        name=f"{state['nom']}_curve.json",
+                                        type="consumption_curve",
+                                        data=state["curve_data"],
+                                        metadata={"original_name": state["nom"], "address": state["adresse"]},
+                                    )
+                                except Exception as e:
+                                    st.error(f"⚠️ Erreur sauvegarde auto dataset: {e}")
+                        
+                            # Auto-save Project
+                            if project_id:
+                                from services.database import save_project
+                                from services.state_serializer import serialize_state
+                                save_project(st.session_state["project_name"], "precalibrage", serialize_state(dict(st.session_state)), project_id)
+                        
+                            st.success(f"✅ Point '{state['nom']}' ajouté et sauvegardé avec succès!")
+                        
+                            # Reset form state
+                            st.session_state["sout_form_state"] = {
+                                "nom": "", "point_livraison": "", "segment": "",
+                                "aci": False, "aci_partenaire": "Aucun",
+                                "adresse": "",
+                                "curve_data": None, "coords": None
+                            }
+                            st.rerun()
+        
+            with col_btn2:
+                if st.button("🔄 Réinitialiser", width='stretch'):
+                    st.session_state["sout_form_state"] = {
+                        "nom": "", "point_livraison": "", "segment": "",
+                        "aci": False, "aci_partenaire": "Aucun",
+                        "adresse": "",
+                        "curve_data": None, "coords": None
+                    }
+                    st.rerun()
 
     with tab2:
         st.subheader("Vérification des contraintes de distance")
