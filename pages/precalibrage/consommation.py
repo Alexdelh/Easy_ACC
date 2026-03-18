@@ -450,13 +450,8 @@ def render():
                     uploaded_file = st.file_uploader("Charger CSV/XLS/XLSX", type=["csv", "xls", "xlsx"], key="edit_upload_curve_sout")
                     if uploaded_file:
                         try:
-                            name = uploaded_file.name.lower()
-                            if name.endswith(".csv"):
-                                curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
-                                curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
-                            else:
-                                curve_df = pd.read_excel(uploaded_file)
-                            edit_state["curve_data"] = curve_df
+                            import io as _io
+                            edit_state["curve_data"] = _io.BytesIO(uploaded_file.read())
                             st.success("✅ Fichier chargé, prêt à être enregistré.")
                         except Exception as e:
                             st.error(f"⚠️ Erreur lecture fichier: {e}")
@@ -539,6 +534,10 @@ def render():
                 }
         
             state = st.session_state["sout_form_state"]
+            # curve_data ne peut pas survivre à une sérialisation/désérialisation (BytesIO ou DataFrame stale)
+            import io as _io
+            if not isinstance(state.get("curve_data"), _io.BytesIO):
+                state["curve_data"] = None
         
             # Input form
             col1, col2, col3 = st.columns(3)
@@ -684,15 +683,8 @@ def render():
                 )
                 if uploaded_file:
                     try:
-                        name = uploaded_file.name.lower()
-                        if name.endswith(".csv"):
-                            # Use sep=None with python engine for auto-detection of separator (handles ; or ,)
-                            curve_df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
-                            # Clean column names (remove BOM and whitespace)
-                            curve_df.columns = [str(col).strip().lstrip('\ufeff') for col in curve_df.columns]
-                        else:
-                            curve_df = pd.read_excel(uploaded_file)
-                        state["curve_data"] = curve_df
+                        import io as _io
+                        state["curve_data"] = _io.BytesIO(uploaded_file.read())
                         st.success("✅ Fichier chargé")
                     except Exception as e:
                         st.error(f"⚠️ Erreur lecture fichier: {e}")
