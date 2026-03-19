@@ -597,16 +597,13 @@ def render():
         st.info("Aucune production sélectionnée.")
 
     # ===============================
+    # ===============================
     # GÉNÉRATION DU PDF DANS LE PLACEHOLDER
     # ===============================
-    with export_placeholder:
-        # Since generating the PDF takes time and uses kaleido/tempfiles,
-        # we put it behind a standard button first, then render the download button
-        
-        # We store the PDF bytes in session state to prevent the download button from disappearing
-        # when the user tries to click it (a classic Streamlit nested-button issue).
-        if st.button("📄 Préparer PDF", width="stretch"):
-            with st.spinner("Génération du PDF en cours... (Téléchargement des graphiques)"):
+    with export_placeholder.container():
+        # Génération automatique du PDF sans demander à l'utilisateur de cliquer sur 'Préparer'
+        if "bilan_pdf_bytes" not in st.session_state:
+            with st.spinner("Génération automatique du PDF en cours... (Téléchargement des graphiques)"):
                 from services.pdf_generator import generate_bilan_pdf, ensure_kaleido_is_patched
                 import concurrent.futures
                 
@@ -636,6 +633,8 @@ def render():
                         pdf_bytes = future.result(timeout=45)
                     
                     st.session_state["bilan_pdf_bytes"] = pdf_bytes
+                    st.rerun()
+                    
                 except concurrent.futures.TimeoutError:
                     st.error("⚠️ La génération PDF a pris trop de temps (Timeout). Si vous êtes sur un Mac M1/M2/M3, l'export de graphiques nécessite *Rosetta 2*. \\n\\n👉 Ouvrez le terminal et tapez : `softwareupdate --install-rosetta` puis redémarrez l'application.")
                 except OSError as e:
@@ -647,6 +646,7 @@ def render():
                     st.error(f"⚠️ Erreur lors de la génération : {e}")
 
         if "bilan_pdf_bytes" in st.session_state:
+            st.success("✅ PDF généré avec succès !")
             st.download_button(
                 label="⬇️ Télécharger le PDF",
                 data=st.session_state["bilan_pdf_bytes"],

@@ -151,6 +151,7 @@ def render_sidebar_precalibrage():
                 st.session_state["scenario_generated"] = True
                 st.session_state["current_phase"] = "bilan"
                 st.session_state["bilan_page"] = 1
+                st.session_state.pop("bilan_pdf_bytes", None) # Force PDF auto-generation on Bilan page
                 st.rerun()
 
         st.divider()
