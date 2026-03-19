@@ -1,9 +1,13 @@
- # ⚡ Easy ACC
- # Projet d’Autoconsommation Collective (ACC)
+ <p align="center">
+  <img src="Resources/Easy_acc.png" width="160"/>
+</p>
+ 
+
+# Projet d’Autoconsommation Collective (ACC)
 
 <p align="center">
-  <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSZmRJwbILvOZPtQPUu3ecP4_6dHJeX_qTg-A&s" width="260"/>
-  <img src="https://www.mael-carhaix.fr/images/interservices/logo-alecob.jpg" width="190"/>
+  <img src="Resources/imtatlantique-rvb.png" width="260"/>
+  <img src="Resources/logo-alecob.jpg" width="190"/>
 </p>
 
 ## Partenaires du projet
@@ -16,11 +20,14 @@
 ### Client
 
 * **ALECOB**
+
   Représentant : *Thomas PICOUET*
 
 ### Encadrement académique
 
 * **IMT Atlantique**
+
+
   Tuteur : *Laurent BRISSON*
 
 ---
@@ -54,9 +61,9 @@ Toute la documentation du projet est centralisée dans le dossier :
 
 Ce dossier contient :
 
-* 🚀 **Guide d'installation & de démarrage**
-* 🧑‍💻 **Guide d’utilisation**
-* 🛠️ **Documentation technique**
+* 🚀 [Guide d'installation et de démarrage](Documentation/Guide_d'installation_et_de_démarrage.pdf)
+* 🧑‍💻 [Guide d'utilisation](Documentation/Guide_d'utilisation.pdf)
+* 🛠️ [Documentation technique](Documentation/Documentation_technique.pdf)
 
 Nous recommandons de consulter ces documents pour :
 
@@ -93,3 +100,5 @@ Le projet repose sur plusieurs composants typiques d’un pipeline data :
 ## 🚀 Pour commencer
 
 👉 Rendez-vous dans le dossier `/documentation` pour suivre les instructions complètes.
+
+
