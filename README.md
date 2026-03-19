@@ -2,7 +2,6 @@
   <img src="Resources/Easy_acc.png" width="160"/>
 </p>
  
-
 # Projet d’Autoconsommation Collective (ACC)
 
 <p align="center">
@@ -17,6 +16,13 @@
 * IMT Atlantique
 * ALECOB
 
+### Équipe projet
+
+* Alexandre DELHOMMEAU
+* Quentin DENIS
+* Clément FORNAGE
+* Sushant POKHAREL
+
 ### Client
 
 * **ALECOB**
@@ -27,10 +33,7 @@
 
 * **IMT Atlantique**
 
-
   Tuteur : *Laurent BRISSON*
-
----
 
 ---
 
@@ -39,15 +42,6 @@
 Ce projet s’inscrit dans le cadre d’un **projet étudiant** réalisé à **IMT Atlantique**, en collaboration avec l’**ALECOB** (Agence Locale de l'Énergie du Centre Ouest Bretagne).
 
 L’objectif est de concevoir une solution permettant de **collecter, traiter, analyser et visualiser des données liées à une communauté d’autoconsommation collective (ACC)**. Le système vise à faciliter la compréhension et l’optimisation de la production et de la consommation d’énergie à l’échelle locale.
-
----
-
-## Équipe projet
-
-* Alexandre DELHOMMEAU
-* Quentin DENIS
-* Clément FORNAGE
-* Sushant POKHAREL
 
 ---
 
@@ -101,4 +95,9 @@ Le projet repose sur plusieurs composants typiques d’un pipeline data :
 
 👉 Rendez-vous dans le dossier `/documentation` pour suivre les instructions complètes.
 
+---
 
+## Licence
+
+Ce projet est distribué sous la licence **[EUPL v1.2 (Licence Publique de l'Union Européenne)](LICENSE)**.
+Toute utilisation, modification ou redistribution doit se faire dans le respect des termes de cette licence.
